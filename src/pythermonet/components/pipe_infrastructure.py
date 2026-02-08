@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import List
-from core.pipe_segment import PipeSegment
+from pythermonet.core.pipe_segment import PipeSegment
 
 @dataclass
 class PipeInfrastructure:

@@ -3,4 +3,4 @@ from .material import Material
 
 @dataclass
 class HeatCarrier(Material):
-    dynamicViscosity: float      # Pa·s
+    dynamicViscosity: float    # Pa·s
