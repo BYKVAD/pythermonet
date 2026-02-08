@@ -11,10 +11,11 @@ EXCLUDE_DIRS = {
 
 def create_init_files(root: Path) -> None:
     for path in root.rglob("*"):
-        if not path.is_dir():
+        # Skip alt, der ligger under ekskluderede mapper
+        if any(part in EXCLUDE_DIRS for part in path.parts):
             continue
 
-        if path.name in EXCLUDE_DIRS:
+        if not path.is_dir():
             continue
 
         init_file = path / "__init__.py"
@@ -23,5 +24,5 @@ def create_init_files(root: Path) -> None:
             print(f"Created: {init_file}")
 
 if __name__ == "__main__":
-    project_root = Path(__file__).parent
+    project_root = Path(__file__).resolve().parent
     create_init_files(project_root)
