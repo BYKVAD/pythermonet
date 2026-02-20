@@ -103,41 +103,49 @@ def run_distribution_pipe_thermal(
     brine: HeatCarrier,
     soil: Soil,
     heat_pumps,  # HeatPumps (din nuværende klasse)
-    # Mode-temperaturer (de Tm-værdier der skal bruges i responsen)
-    Ti_heat_C: float,
-    To_heat_C: float,
+
+    # NYE inputs (foretrukne): constraints
+    T_brine_min_heat_C: Optional[float] = None,
+    T_brine_max_cool_C: Optional[float] = None,
+
+    # GAMLE inputs (backwards compatible): eksplicitte mode-temperaturer
+    Ti_heat_C: Optional[float] = None,
+    To_heat_C: Optional[float] = None,
     Ti_cool_C: Optional[float] = None,
     To_cool_C: Optional[float] = None,
+
     # Pulsvarigheder (3-puls)
     peak_heating_h: float = 4.0,
     peak_cooling_h: float = 4.0,
     season_days: float = 180.0,
     year_days: float = 365.25,
-    # Rør-/site antagelser (kan overstyres eller hentes fra network hvis du gemmer dem dér)
+
+    # Rør-/site antagelser
     burial_depth_m: Optional[float] = None,
     k_pipe_W_mK: Optional[float] = None,
     n_parallel_pipes: Optional[int] = None,
     pipe_spacing_m: Optional[float] = None,
+
     # Boundary conditions
     T0_C: Optional[float] = None,
     surface_amp_C: Optional[float] = None,
+
     # Cooling toggle
     enable_cooling: bool = True,
 ) -> DistributionPipeThermalResult:
     """
     One-liner runner til distributionsrør-termik.
 
-    Forventer at heat_pumps indeholder 3-puls loads:
-      - heating_ground_load_eff_W (eller heating_ground_load_W i v2)
-      - cooling_ground_load_eff_W (optional)
+    Temperatur-input:
+      - Foretrukket: T_brine_min_heat_C (heating) / T_brine_max_cool_C (cooling)
+        samt heat_pumps.deltaT_sys_heat_C / deltaT_sys_cool_C til at aflede Ti/To.
+      - Backwards compatible: Ti_heat_C/To_heat_C osv.
     """
 
     # --- Defaults fra objekter hvis muligt ---
-    # T0 og amplitude: fra soil hvis ikke givet
     T0_C = float(T0_C if T0_C is not None else _first_attr(soil, ["surfaceTemp"], 9.0))
     surface_amp_C = float(surface_amp_C if surface_amp_C is not None else _first_attr(soil, ["surfaceTempAmp"], 7.0))
 
-    # burial depth / pipe spacing / parallel pipes: prøv at hente fra network (hvis du har felter), ellers fallback
     burial_depth_m = float(
         burial_depth_m
         if burial_depth_m is not None
@@ -154,20 +162,32 @@ def run_distribution_pipe_thermal(
         else _first_attr(network, ["pipe_distance", "pipeDistance", "pipe_distance_m", "pipeDistance_m"], None)
     )
 
-    # k_pipe: brug materialets k hvis ikke givet
     if k_pipe_W_mK is None:
-        # forsøg: network.infrastructure.traceSegments[0].material.thermalCond
         seg0 = network.infrastructure.traceSegments[0]
         k_pipe_W_mK = float(_first_attr(seg0, ["material"], None).thermalCond) if hasattr(seg0, "material") else 0.4
     k_pipe_W_mK = float(k_pipe_W_mK)
 
-    # --- Loads: brug dine eksisterende felter (du bruger heating_ground_load_eff_W i din main) ---
+    # --- Loads ---
     if hasattr(heat_pumps, "heating_ground_load_eff_W"):
         P_heat_3_W = np.asarray(heat_pumps.heating_ground_load_eff_W, dtype=float)
     else:
         P_heat_3_W = np.asarray(heat_pumps.heating_ground_load_W, dtype=float)
 
     times_heat_s = _times_3pulse_s(year_days=year_days, season_days=season_days, peak_h=peak_heating_h)
+
+    # ---------------------------------------------------------------------
+    # Temperaturer: afled Ti/To fra constraints + system-ΔT, hvis muligt
+    # ---------------------------------------------------------------------
+    # Heating:
+    if (Ti_heat_C is None or To_heat_C is None):
+        if T_brine_min_heat_C is None:
+            raise ValueError(
+                "Provide either (Ti_heat_C, To_heat_C) OR T_brine_min_heat_C."
+            )
+        dT_sys_heat = float(getattr(heat_pumps, "deltaT_sys_heat_C"))
+        # Konvention: i heating er den koldeste temperatur ved HP inlet => Ti = Tmin
+        Ti_heat_C = float(T_brine_min_heat_C)
+        To_heat_C = float(Ti_heat_C - dT_sys_heat)
 
     heating_mode = PipeThermalResponseModeInput(
         spec=_pulse_spec(times_heat_s, P_heat_3_W),
@@ -184,23 +204,38 @@ def run_distribution_pipe_thermal(
         use_mode="heating",
     )
 
+    # Cooling:
     cooling_mode = None
-    if enable_cooling and getattr(heat_pumps, "cooling_ground_load_eff_W", None) is not None:
-        if Ti_cool_C is None or To_cool_C is None:
-            raise ValueError("Cooling enabled, but Ti_cool_C/To_cool_C not provided")
+    if enable_cooling:
+        # i din codebase bruges cooling_ground_load_eff_W nogle steder – ellers cooling_ground_load_W (ny)
+        P_cool_eff = getattr(heat_pumps, "cooling_ground_load_eff_W", None)
+        P_cool_new = getattr(heat_pumps, "cooling_ground_load_W", None)
+        has_cooling_loads = P_cool_eff is not None or P_cool_new is not None
 
-        P_cool_3_W = np.asarray(heat_pumps.cooling_ground_load_eff_W, dtype=float)
-        times_cool_s = _times_3pulse_s(year_days=year_days, season_days=season_days, peak_h=peak_cooling_h)
+        if has_cooling_loads:
+            # Hvis caller ikke gav Ti/To, så kræv Tmax + system ΔT (cool)
+            if (Ti_cool_C is None or To_cool_C is None):
+                if T_brine_max_cool_C is None:
+                    raise ValueError(
+                        "Cooling enabled and cooling loads exist. "
+                        "Provide either (Ti_cool_C, To_cool_C) OR T_brine_max_cool_C."
+                    )
+                dT_sys_cool = getattr(heat_pumps, "deltaT_sys_cool_C", None)
+                if dT_sys_cool is None:
+                    raise ValueError("Cooling requires heat_pumps.deltaT_sys_cool_C (system ΔT for cooling).")
 
-        cooling_mode = PipeThermalResponseModeInput(
-            spec=_pulse_spec(times_cool_s, P_cool_3_W),
-            Ti_C=float(Ti_cool_C),
-            To_C=float(To_cool_C),
-        )
+                # Konvention: i cooling er den varmeste temperatur ved HP inlet => Ti = Tmax
+                Ti_cool_C = float(T_brine_max_cool_C)
+                To_cool_C = float(Ti_cool_C + float(dT_sys_cool))
 
-        # (valgfrit) du kan vælge at bygge pipe_groups igen med cooling-Re
-        # hvis du vil bruge cooling-Re i termikken. Default: heating-Re.
-        # pipe_groups = _build_pipe_groups_from_network(... use_mode="cooling")
+            P_cool_3_W = np.asarray(P_cool_eff if P_cool_eff is not None else P_cool_new, dtype=float)
+            times_cool_s = _times_3pulse_s(year_days=year_days, season_days=season_days, peak_h=peak_cooling_h)
+
+            cooling_mode = PipeThermalResponseModeInput(
+                spec=_pulse_spec(times_cool_s, P_cool_3_W),
+                Ti_C=float(Ti_cool_C),
+                To_C=float(To_cool_C),
+            )
 
     inp = DistributionPipeThermalInput(
         brine=brine,
