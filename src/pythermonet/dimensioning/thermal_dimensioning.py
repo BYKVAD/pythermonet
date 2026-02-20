@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..physics.sources import ils, CSM
-from ..physics.heat_transfer import Rp, RbMP, RbMPflc, Halley
+from ..physics.thermal_resistances import Rp, RbMP, RbMPflc, Halley
 from ..system.gfunctions import compute_gfunction_pygfunction, compute_gfunction_infinite_medium
 from ..logging_config import get_logger
 

@@ -38,6 +38,21 @@ def _has_meaningful_cooling(df: pd.DataFrame) -> bool:
     return bool((dT.notna() & (dT != 0)).any() and (q.notna() & (q != 0)).any() and (eer.notna() & (eer > 0)).any())
 
 
+# from __future__ import annotations
+
+# from pathlib import Path
+
+# import pandas as pd
+
+# from pythermonet.core.heat_carrier import HeatCarrier
+# from pythermonet.components.heat_pumps import HeatPumps
+# from pythermonet.components.heat_pump import HeatPump
+
+# Forudsætter at disse findes i din fil
+# _REQUIRED_COLS = [...]
+# def _has_meaningful_cooling(df: pd.DataFrame) -> bool: ...
+
+
 def read_heat_pumps_tsv(
     path: str | Path,
     *,
@@ -59,6 +74,8 @@ def read_heat_pumps_tsv(
     heat_pumps: list[HeatPump] = []
 
     for r in df.to_dict(orient="records"):
+        hp_id = int(r["Heat_pump_ID"])
+
         # --- raw loads (building side) ---
         Qh_y = float(r["Yearly_heating_load_(W)"])
         Qh_w = float(r["Winter_heating_load_(W)"])
@@ -70,31 +87,40 @@ def read_heat_pumps_tsv(
 
         dT_h = float(r["dT_HP_Heating"])
 
-        # --- ground loads (heating): + extracted ---
-        # P_ground = Q_load * (1 - 1/COP)
-        Gh_y = Qh_y * (1.0 - 1.0 / COP_y)
-        Gh_w = Qh_w * (1.0 - 1.0 / COP_w)
-        Gh_p = Qh_p * (1.0 - 1.0 / COP_p)
+        # --- fail-fast validation (heating) ---
+        if COP_y <= 0 or COP_w <= 0 or COP_p <= 0:
+            raise ValueError(
+                f"Invalid COP (<=0) for Heat_pump_ID={hp_id}: "
+                f"Year_COP={COP_y}, Winter_COP={COP_w}, Hour_COP={COP_p}"
+            )
+        if dT_h <= 0:
+            raise ValueError(f"Invalid dT_HP_Heating (<=0) for Heat_pump_ID={hp_id}: {dT_h}")
 
         # --- optional cooling ---
-        Qc_y = float(r["Yearly_cooling_load_(W)"]) if has_cooling else 0.0
-        Qc_s = float(r["Summer_cooling_load_(W)"]) if has_cooling else 0.0
-        Qc_p = float(r["Daily_cooling_load_(W)"]) if has_cooling else 0.0
-
-        EER = float(r["EER"]) if has_cooling else 0.0
-        dT_c = float(r["dT_HP_Cooling"]) if has_cooling else 0.0
-
-        # ground loads (cooling): - injected
-        # P_rejected = Q_cool * (1 + 1/EER)  then apply minus sign
         if has_cooling:
-            Gc_y = -Qc_y * (1.0 + 1.0 / EER)
-            Gc_s = -Qc_s * (1.0 + 1.0 / EER)
-            Gc_p = -Qc_p * (1.0 + 1.0 / EER)
+            Qc_y = float(r["Yearly_cooling_load_(W)"])
+            Qc_s = float(r["Summer_cooling_load_(W)"])
+            Qc_p = float(r["Daily_cooling_load_(W)"])
+
+            EER = float(r["EER"])
+            dT_c = float(r["dT_HP_Cooling"])
+
+            # Hvis der er en kølekolonne, men denne HP reelt ikke køler,
+            # accepter 0 og lad HeatPump.__post_init__ håndtere det.
+            if Qc_p > 0:
+                if EER <= 0:
+                    raise ValueError(f"Invalid EER (<=0) for Heat_pump_ID={hp_id} with cooling load > 0: {EER}")
+                if dT_c <= 0:
+                    raise ValueError(f"Invalid dT_HP_Cooling (<=0) for Heat_pump_ID={hp_id} with cooling load > 0: {dT_c}")
         else:
-            Gc_y = Gc_s = Gc_p = 0.0
+            Qc_y = 0.0
+            Qc_s = 0.0
+            Qc_p = 0.0
+            EER = 0.0
+            dT_c = 0.0
 
         hp = HeatPump(
-            ID=int(r["Heat_pump_ID"]),
+            ID=hp_id,
 
             annualHeatingLoad=Qh_y,
             winterHeatingLoad=Qh_w,
@@ -114,15 +140,8 @@ def read_heat_pumps_tsv(
             deltaTCooling=dT_c,
 
             sourceHeatCarrier=source_heat_carrier,
-
-            annualHeating_ground_load=Gh_y,
-            winterHeating_ground_load=Gh_w,
-            peakHeating_ground_load=Gh_p,
-
-            annualCooling_ground_load=Gc_y,
-            summerCooling_ground_load=Gc_s,
-            peakCooling_ground_load=Gc_p,
         )
+
         heat_pumps.append(hp)
 
-    return HeatPumps(heatPumpList=heat_pumps)
+    return heat_pumps

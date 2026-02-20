@@ -5,6 +5,7 @@ import numpy as np
 from pythermonet.physics.hydraulics import pressure_loss_per_length as dp
 from pythermonet.physics.hydraulics import reynolds_number as Re
 from pythermonet.logging_config import get_logger
+from pythermonet.system.diversity_factor import diversity_factor_from_n_heat_pumps
 
 logger = get_logger(__name__)
 
@@ -92,7 +93,7 @@ def run_pipedimensioning(
 
         # Diversity factor (legacy formulation)
         # Peak fractions are handled elsewhere → unity scaling here
-        S_H = 1.0 * (0.62 + 0.38 / N_HP_per_trace)
+        S_H = diversity_factor_from_n_heat_pumps(N_HP_per_trace)
 
         # ---- Heating: sum ground-side peak loads ----
         m3_s_peak_heating_sum = 0.0
@@ -113,7 +114,7 @@ def run_pipedimensioning(
 
         # ---- Cooling (optional) ----
         if doCooling:
-            S_C = 1.0 * (0.62 + 0.38 / N_HP_per_trace)
+            S_C = diversity_factor_from_n_heat_pumps(N_HP_per_trace)
 
             m3_s_peak_cooling_sum = 0.0
             for hpid in ids:
