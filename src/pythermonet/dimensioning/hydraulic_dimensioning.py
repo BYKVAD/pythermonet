@@ -144,7 +144,7 @@ def run_pipedimensioning(
         candidate_inner_diameters = pipe_catalogue_sorted * (1.0 - 2.0 / SDR_i)
 
         # Total hydraulic length = forward + return
-        L_tot = 2.0 * float(network.L_traces[i])
+        L_tot = network.infrastructure.NParallelPipes * float(network.L_traces[i])
 
         # Heating
         ok = (

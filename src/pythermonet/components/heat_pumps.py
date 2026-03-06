@@ -18,13 +18,10 @@ class HeatPumps:
       - aggregerede ground loads (3-puls)
       - aggregerede peak flows (q og mdot) beregnet fra brine + HP ΔT
       - én og kun én system-ΔT for heating og cooling respektivt (flow-vægtet)
-
-    Bemærk:
-      - HeatCarrier eksisterer kun her (første skridt mod at flytte op i ThermalNetwork)
     """
 
     heatPumpList: List[HeatPump]
-    brine: HeatCarrier  # eneste sted carrier lever
+    brine: HeatCarrier
 
     peak_heating_h: float = 4.0
     peak_cooling_h: Optional[float] = 4.0  # None => cooling peak pulse disabled
@@ -35,36 +32,45 @@ class HeatPumps:
     peak_fraction_cooling_mode: PeakSupplyMode = "incremental"
     peak_fraction_cooling: float = 1.0
 
-    # computed
+    # -----------------------
+    # Computed (always set)
+    # -----------------------
     n_heat_pumps: int = field(init=False)
     diversity_factor: float = field(init=False)
 
-    heating_ground_load_W: np.ndarray = field(init=False)            # (3,)
-    cooling_ground_load_W: Optional[np.ndarray] = field(init=False)  # (3,) or None
+    heating_ground_load_W: np.ndarray = field(init=False)  # (3,) [year, winter, peak_eff]
 
     aggregated_q_peak_heat_m3_s: float = field(init=False)
     aggregated_mdot_peak_heat_kg_s: float = field(init=False)
 
+    deltaT_sys_heat: float = field(init=False)
+
+    # -----------------------
+    # Cooling (optional; set to None when inactive)
+    # -----------------------
+    has_cooling: bool = field(default=False, init=False)
+
+    cooling_ground_load_W: Optional[np.ndarray] = field(init=False)  # (3,) or None
+
     aggregated_q_peak_cool_m3_s: Optional[float] = field(init=False)
     aggregated_mdot_peak_cool_kg_s: Optional[float] = field(init=False)
 
-    # one and only one ΔT per mode (system level)
-    deltaT_sys_heat_C: float = field(init=False)
-    deltaT_sys_cool_C: Optional[float] = field(init=False)
+    deltaT_sys_cool: Optional[float] = field(init=False)
 
     def __post_init__(self) -> None:
+        # -----------------------
+        # Basic validation
+        # -----------------------
         n = len(self.heatPumpList)
         if n <= 0:
             raise ValueError("HeatPumps requires at least one HeatPump")
         object.__setattr__(self, "n_heat_pumps", n)
 
-        # validate durations
         if self.peak_heating_h <= 0:
             raise ValueError("peak_heating_h must be > 0")
         if self.peak_cooling_h is not None and self.peak_cooling_h <= 0:
             raise ValueError("peak_cooling_h must be > 0 when provided")
 
-        # validate fractions + modes
         if not (0.0 <= self.peak_fraction_heating <= 1.0):
             raise ValueError("peak_fraction_heating must be in [0,1]")
         if not (0.0 <= self.peak_fraction_cooling <= 1.0):
@@ -75,7 +81,6 @@ class HeatPumps:
         if self.peak_fraction_cooling_mode not in ("absolute", "incremental"):
             raise ValueError("peak_fraction_cooling_mode must be 'absolute' or 'incremental'")
 
-        # validate brine props
         rho = float(self.brine.rho)
         cp = float(self.brine.c)
         if rho <= 0 or cp <= 0:
@@ -100,18 +105,14 @@ class HeatPumps:
             mode=self.peak_fraction_heating_mode,
             alpha=self.peak_fraction_heating,
         )
-
         object.__setattr__(self, "heating_ground_load_W", np.asarray([P_year, P_wint, P_peak_eff], dtype=float))
 
         # -----------------------
-        # HEATING peak flows (raw -> diversity -> peak_fraction)
+        # HEATING peak flows + system ΔT
         # -----------------------
-        # Raw (population) peak flows based on each HP peak ground load and ΔTHeating:
-        # mdot_i = P_ground_i / (cp * ΔT_i)
-        # q_i    = mdot_i / rho
         sum_mdot_H_raw = 0.0
         sum_q_H_raw = 0.0
-        sum_mdot_dT_H = 0.0  # for system-level ΔT
+        sum_mdot_dT_H = 0.0
 
         for hp in self.heatPumpList:
             dT = float(hp.deltaTHeating)
@@ -120,7 +121,6 @@ class HeatPumps:
             P = float(hp.peakHeating_ground_load)
             mdot = P / (cp * dT)
             q = mdot / rho
-
             sum_mdot_H_raw += mdot
             sum_q_H_raw += q
             sum_mdot_dT_H += mdot * dT
@@ -128,10 +128,8 @@ class HeatPumps:
         if sum_mdot_H_raw <= 0.0:
             raise ValueError("Sum of peak heating mdot must be > 0.")
 
-        # One and only one ΔT on system level (heating)
-        object.__setattr__(self, "deltaT_sys_heat_C", float(sum_mdot_dT_H / sum_mdot_H_raw))
+        object.__setattr__(self, "deltaT_sys_heat", float(sum_mdot_dT_H / sum_mdot_H_raw))
 
-        # Apply diversity then scale to peak_eff
         mdot_H_div = f * sum_mdot_H_raw
         q_H_div = f * sum_q_H_raw
 
@@ -140,20 +138,25 @@ class HeatPumps:
         object.__setattr__(self, "aggregated_q_peak_heat_m3_s", float(scale_H * q_H_div))
 
         # -----------------------
-        # COOLING (optional)
+        # COOLING detection (after heating)
         # -----------------------
-        has_cooling = any(float(hp.peakCoolingLoad) > 0.0 for hp in self.heatPumpList)
-        if not has_cooling:
+        # "Cooling active" if any meaningful cooling exists (robust to sign)
+        P_peak_c_raw = float(sum(self._mag(hp.peakCooling_ground_load) for hp in self.heatPumpList))
+        meaningful_cooling = not np.isclose(P_peak_c_raw, 0.0, atol=1.0)
+
+        if not meaningful_cooling:
+            object.__setattr__(self, "has_cooling", False)
             object.__setattr__(self, "cooling_ground_load_W", None)
             object.__setattr__(self, "aggregated_mdot_peak_cool_kg_s", None)
             object.__setattr__(self, "aggregated_q_peak_cool_m3_s", None)
-            object.__setattr__(self, "deltaT_sys_cool_C", None)
+            object.__setattr__(self, "deltaT_sys_cool", None)
             return
 
-        # Cooling loads aggregated as magnitudes (robust to sign conventions)
+        object.__setattr__(self, "has_cooling", True)
+
+        # Cooling loads aggregated as magnitudes
         P_year_c = float(sum(self._mag(hp.annualCooling_ground_load) for hp in self.heatPumpList))
         P_summ_c = float(sum(self._mag(hp.summerCooling_ground_load) for hp in self.heatPumpList))
-        P_peak_c_raw = float(sum(self._mag(hp.peakCooling_ground_load) for hp in self.heatPumpList))
 
         P_peak_c_div = f * P_peak_c_raw
 
@@ -169,7 +172,7 @@ class HeatPumps:
 
         object.__setattr__(self, "cooling_ground_load_W", np.asarray([P_year_c, P_summ_c, P_peak_c_eff], dtype=float))
 
-        # Cooling flows + one system ΔT (cooling)
+        # Cooling flows + system ΔT
         sum_mdot_C_raw = 0.0
         sum_q_C_raw = 0.0
         sum_mdot_dT_C = 0.0
@@ -181,9 +184,7 @@ class HeatPumps:
 
             dT = float(hp.deltaTCooling)
             if dT <= 0:
-                raise ValueError(
-                    f"HeatPump ID={hp.ID}: deltaTCooling must be > 0 when cooling is active."
-                )
+                raise ValueError(f"HeatPump ID={hp.ID}: deltaTCooling must be > 0 when cooling is active.")
 
             mdot = Pmag / (cp * dT)
             q = mdot / rho
@@ -193,13 +194,13 @@ class HeatPumps:
             sum_mdot_dT_C += mdot * dT
 
         if sum_mdot_C_raw <= 0.0:
-            # cooling findes i laster, men kan ikke omsættes til flows -> inkonsistent input
+            # cooling loads exist, but cannot compute flows -> inconsistent input
             object.__setattr__(self, "aggregated_mdot_peak_cool_kg_s", None)
             object.__setattr__(self, "aggregated_q_peak_cool_m3_s", None)
-            object.__setattr__(self, "deltaT_sys_cool_C", None)
+            object.__setattr__(self, "deltaT_sys_cool", None)
             return
 
-        object.__setattr__(self, "deltaT_sys_cool_C", float(sum_mdot_dT_C / sum_mdot_C_raw))
+        object.__setattr__(self, "deltaT_sys_cool", float(sum_mdot_dT_C / sum_mdot_C_raw))
 
         mdot_C_div = f * sum_mdot_C_raw
         q_C_div = f * sum_q_C_raw

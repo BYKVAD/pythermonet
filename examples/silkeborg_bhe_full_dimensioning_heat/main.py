@@ -20,6 +20,7 @@ from pythermonet.gfunctions.service import GFunctionsService
 
 from pythermonet.physics.bhe_resistance import compute_rb_for_vhe_field
 from pythermonet.simulation.run_distribution_pipe_thermal import run_distribution_pipe_thermal
+import numpy as np
 
 
 # -----------------------------------------------------------------------------
@@ -52,7 +53,7 @@ brine = HeatCarrier(
 )
 
 soil = Soil(
-    rho=2650,
+    rho=2500,
     c=1000,
     thermalCond=2.36,
     thermalCondShallowHeating=1.25,
@@ -94,8 +95,8 @@ hp = HeatPumps(
 
 print("N HP:", hp.n_heat_pumps)
 print("Diversity:", hp.diversity_factor)
-print("ΔT_sys_heat [K]:", hp.deltaT_sys_heat_C)
-print("ΔT_sys_cool [K]:", hp.deltaT_sys_cool_C)
+print("ΔT_sys_heat [K]:", hp.deltaT_sys_heat)
+print("ΔT_sys_cool [K]:", hp.deltaT_sys_cool)
 
 
 # -----------------------------------------------------------------------------
@@ -108,9 +109,6 @@ distribution_network = run_pipedimensioning(
     heat_pumps=hp,
 )
 
-print("Dimensioned distribution network:", distribution_network.infrastructure.traceSegments)
-
-
 # -----------------------------------------------------------------------------
 # 4) Borehole field + g-functions
 # -----------------------------------------------------------------------------
@@ -120,20 +118,15 @@ borehole_diameter_m = 0.152
 r_b_m = borehole_diameter_m / 2.0
 H_m = 150.0
 D_m = 1.5
-
-times_s = [4 * 3600, 86400 * 365.25 / 4, 30 * 365.25 * 86400]
-alpha_m2_s = soil.thermalCond / (soil.rho * soil.c)
-
 # U-pipe geometry (legacy)
 u_pipe_outer_diameter_m = 0.04
 u_pipe_sdr = 11.0
 
 grout = Material(rho=1500, c=2e3, thermalCond=1.75)
-
 pipe_material_bhe = Material(rho=1000, c=2e3, thermalCond=0.4)
-
 borehole = Annulus(outerDiameter=borehole_diameter_m, SDR=1000.0)
 
+# Create a single "representative" pipe segment for the VHE field (U-pipe geometry)
 pipe = PipeSegment(
     outerDiameter=u_pipe_outer_diameter_m,
     SDR=u_pipe_sdr,
@@ -155,6 +148,7 @@ vhe_field = VHEField(
     shankSpacing=0.015 + 2 * 0.02,
 )
 
+# Define borehole field
 boreholes = vhe_field.to_pygfunction_boreholes(
     H_m=H_m,
     D_m=D_m,
@@ -162,6 +156,11 @@ boreholes = vhe_field.to_pygfunction_boreholes(
     use_z_as_depth=False,
 )
 
+# Simulation time and diffusivity
+times_s = [4 * 3600, 4 * 3600 + 86400 * 365.25 / 4, 4 * 3600 + 86400 * 365.25 / 4  + 30 * 365.25 * 86400]
+alpha_m2_s = soil.thermalCond / (soil.rho * soil.c)
+
+# Create a request object for g-functions
 req = GFunctionRequest(
     times_s=times_s,
     boreholes=boreholes,
@@ -171,12 +170,12 @@ req = GFunctionRequest(
     options={},
 )
 
+# Get g-functions (will be cached for future use)
 gset = GFunctionsService(cache=None).compute(req)
 print("Computed g-functions:", gset.g_values[:5])
 
-
 # -----------------------------------------------------------------------------
-# 5) BHE thermal resistance (Rb)
+# 5) Compute BHE thermal resistance from flow simulations (Rb)
 # -----------------------------------------------------------------------------
 Q_peak_m3_s = hp.aggregated_q_peak_heat_m3_s
 print("Peak volumetric flow rate [m3/s]:", Q_peak_m3_s)
@@ -193,19 +192,18 @@ rb = compute_rb_for_vhe_field(
 print("Rb [K*m/W] =", rb.Rb_K_m_W)
 print("Re, Pr     =", rb.Re, rb.Pr)
 
-
 # -----------------------------------------------------------------------------
-# 6) Distribution pipe thermal model
+# 6) Distribution pipe thermal simulation
 # -----------------------------------------------------------------------------
 dist_therm = run_distribution_pipe_thermal(
     network=distribution_network,
     brine=brine,
     soil=soil,
     heat_pumps=hp,
-    peak_heating_h=4.0,
-    T_brine_min_heat_C=-3.0,
-    T_brine_max_cool_C=25.0,
+    times_heat_s=np.flip(times_s),
+    times_cool_s=np.flip(times_s),
+    T_brine_min_heat=-3.0,
+    T_brine_max_cool=25.0,
 )
 
 print("T_dimv (heating) [°C]:", dist_therm.heating.T_dimv_C)
-print("F_total (heating):", dist_therm.heating.F_total)

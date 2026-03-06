@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from pythermonet.components.pipe_infrastructure import PipeInfrastructure
+from pythermonet.core.material import Material
 
 @dataclass
 class DistributionNetwork:
@@ -14,9 +15,10 @@ class DistributionNetwork:
     SDR: np.ndarray
     L_traces: np.ndarray
     N_traces: np.ndarray
-    L_segments: np.ndarray
 
-    # outputs from dimensioning
+    globalMaterial: Material | None = None  # sættes automatisk
+
+    # outputs...
     dimensioned_pipe_diameter_heating: np.ndarray | None = None
     dimensioned_pipe_inner_diameter_heating: np.ndarray | None = None
     dimensioned_pipe_reynolds_number_heating: np.ndarray | None = None
@@ -24,3 +26,24 @@ class DistributionNetwork:
     dimensioned_pipe_inner_diameter_cooling: np.ndarray | None = None
     dimensioned_pipe_reynolds_number_cooling: np.ndarray | None = None
     V_brine: float | None = None
+
+    def __post_init__(self) -> None:
+        segments = self.infrastructure.traceSegments
+
+        if len(segments) == 0:
+            raise ValueError("No traceSegments in infrastructure.")
+
+        first = segments[0].material
+        k0 = first.thermalCond
+        rho0 = first.rho  # eller hvad din anden property hedder
+        c0 = first.c
+
+        for seg in segments[1:]:
+            mat = seg.material
+            if mat.thermalCond != k0 or mat.rho != rho0 or mat.c != c0:
+                raise ValueError(
+                    "All pipe materials must have identical thermal properties."
+                )
+
+        # sæt globalMaterial til første
+        self.globalMaterial = first

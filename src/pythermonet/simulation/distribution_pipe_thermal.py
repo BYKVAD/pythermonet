@@ -27,9 +27,8 @@ class PipeGroupThermalInput:
     Re: float
     k_pipe_W_mK: float
     burial_depth_m: float
-
-    # Parallelle rør i samme grøft/bundle:
-    n_pipes: int = 1
+    n_parallel_pipes: int
+    n_traces: int
     pipe_spacing_m: float | None = None  # kræves hvis n_pipes > 1
 
 
@@ -63,8 +62,8 @@ class DistributionPipeThermalInput:
     brine: HeatCarrier
     soil: Soil
 
-    T0_C: float               # undisturbed ground temp (reference)
-    surface_amp_C: float      # amplitude af surface temp variation (A)
+    T0: float               # undisturbed ground temp (reference)
+    surface_amp: float      # amplitude af surface temp variation (A)
 
     pipe_groups: list[PipeGroupThermalInput]
 
@@ -142,39 +141,42 @@ def _delta_p(powers_W: np.ndarray) -> np.ndarray:
     return dP
 
 
-def k1_pipe_bundle(a_s: float, t, z: float, *, n_pipes: int, spacing: float | None):
+def k1_pipe_bundle(
+    a_s: float,
+    t,
+    z: float,
+    *,
+    n_parallel_pipes: int,
+    spacing: float | None,
+):
     """
-    K1 korrektion (interaktion + image) generaliseret for n_pipes >= 1.
-    Returnerer samme shape som t (scalar eller array).
+    Repræsentativ K1 for 1- og 2-rørs system i samme dybde z med isoterm overflade (spejlkilder).
 
-    Fortolkning (legacy):
-      - self-image: -ILS(2z)
-      - for hver anden pipe: +ILS(Dij) - ILS(sqrt(Dij^2 + 4z^2))
+    - 1-rør (one-pipe): n_parallel_pipes = 1
+      K1(t) = -ILS(2z)
+
+    - 2-rør (two-pipe): n_parallel_pipes = 2 (rørafstand = spacing)
+      For hvert rør:
+        K1(t) = -ILS(2z) + ILS(s) - ILS(sqrt(s^2 + 4z^2))
+      (begge rør har samme respons pga. symmetri, så “bundle”-respons = samme værdi)
     """
-    if n_pipes <= 0:
-        raise ValueError("n_pipes must be >= 1")
+    if n_parallel_pipes not in (1, 2):
+        raise ValueError("Only one- and two-pipe systems are supported: n_parallel_pipes must be 1 or 2.")
 
-    base = -ils(a_s, t, 2.0 * z)
-    if n_pipes == 1:
-        return base
+    # One-pipe
+    if n_parallel_pipes == 1:
+        return -ils(a_s, t, 2.0 * z)
 
+    # Two-pipe
     if spacing is None:
-        raise ValueError("pipe_spacing_m must be set when n_pipes > 1")
+        raise ValueError("spacing must be set when n_parallel_pipes == 2")
 
-    xs = np.arange(n_pipes, dtype=float) * float(spacing)
-
-    K_sum = 0.0
-    for i in range(n_pipes):
-        Ki = -ils(a_s, t, 2.0 * z)
-        for j in range(n_pipes):
-            if i == j:
-                continue
-            Dij = abs(xs[i] - xs[j])
-            Ki = Ki + ils(a_s, t, Dij) - ils(a_s, t, math.sqrt(Dij * Dij + 4.0 * z * z))
-        K_sum = K_sum + Ki
-
-    # gennemsnit pr. pipe (stabil skala når n vokser)
-    return K_sum / float(n_pipes)
+    s = float(spacing)
+    return (
+        -ils(a_s, t, 2.0 * z)
+        + ils(a_s, t, s)
+        - ils(a_s, t, math.sqrt(s * s + 4.0 * z * z))
+    )
 
 
 # -----------------------------
@@ -186,7 +188,7 @@ def _compute_mode(
     mode_name: str,  # "heating" | "cooling"
     inp: DistributionPipeThermalInput,
     mode: PipeThermalResponseModeInput,
-    sign_TP_in_T0_term: float,
+    #sign_TP_in_T0_term: float,
 ) -> DistributionPipeThermalModeResult:
     """
     sign_TP_in_T0_term:
@@ -205,7 +207,7 @@ def _compute_mode(
         raise ValueError(f"{mode_name}: times_s must be a 1D array")
     if np.any(times <= 0):
         raise ValueError(f"{mode_name}: all times_s must be > 0")
-
+    
     dP = _delta_p(powers)
 
     Ti = float(mode.Ti_C)
@@ -228,10 +230,10 @@ def _compute_mode(
             raise ValueError(f"PipeGroup ID={pg.ID}: Di_m/Do_m must be > 0")
         if pg.Do_m < pg.Di_m:
             raise ValueError(f"PipeGroup ID={pg.ID}: Do_m must be >= Di_m")
-        if pg.n_pipes > 1 and pg.pipe_spacing_m is None:
-            raise ValueError(f"PipeGroup ID={pg.ID}: pipe_spacing_m must be set when n_pipes>1")
+        if pg.n_parallel_pipes > 1 and pg.pipe_spacing_m is None:
+            raise ValueError(f"PipeGroup ID={pg.ID}: pipe_spacing_m must be set when n_parallel_pipes>1")
 
-        TP = _temp_penalty_at_depth(inp.surface_amp_C, pg.burial_depth_m, a_s)
+        TP = _temp_penalty_at_depth(inp.surface_amp, pg.burial_depth_m, a_s)
 
         # R_pipe [m*K/W]
         R = pipe_thermal_resistance(
@@ -244,27 +246,32 @@ def _compute_mode(
         )
 
         # G_grid(t): CSM + K1 (image + inter-pipe)
-        K1 = k1_pipe_bundle(a_s, times, pg.burial_depth_m, n_pipes=pg.n_pipes, spacing=pg.pipe_spacing_m)
+        #print("Times:", times)
+        
+        K1 = k1_pipe_bundle(a_s, times, pg.burial_depth_m, n_parallel_pipes=pg.n_parallel_pipes, spacing=pg.pipe_spacing_m)
         G_grid = csm(float(pg.Do_m) / 2.0, float(pg.Do_m) / 2.0, times, a_s) + K1  # shape (Nt,)
+        #print(f"G_grid={G_grid}, R={R}, np={pg.n_parallel_pipes}, Space={pg.pipe_spacing_m}, a_s={a_s}")
 
         # Denominator: dot(dP, (G/k_s + R)/L)
-        denom = float(np.dot(dP, ((G_grid / k_s) + R) / float(pg.L_m)))
+        denom = float(np.dot(dP, ((G_grid / k_s) + R) / float(pg.L_m) / float(pg.n_traces)))
 
         # Numerator og fraktion
         # heating legacy: (T0 - Tm - TP)
         # cooling legacy: (Tm - T0 - TP)
         if mode_name == "heating":
-            num = (inp.T0_C - Tm - TP)
+            num = (inp.T0 - Tm - TP)
+            sign_TP_in_T0_term = -1.0
         else:
-            num = (Tm - inp.T0_C - TP)
-
+            num = (Tm - inp.T0 - TP)
+            sign_TP_in_T0_term = +1.0
+        #print(f"inp.to ID={inp.T0}: Tm={Tm}, TP={TP}, pg.L_m={pg.L_m}")
         F_per[i] = float(num / denom)
 
         # Temperatursekvens via superposition:
         # heating: T = T0 - TP - F * cumsum(dP * (G/k_s + R)/L)
         # cooling: T = T0 + TP - F * cumsum(...)  (samme algebra, men TP-signeret via sign_TP_in_T0_term)
-        kernel = dP * (((G_grid / k_s) + R) / float(pg.L_m))
-        T_seq = float(inp.T0_C) + sign_TP_in_T0_term * TP - F_per[i] * np.cumsum(kernel)
+        kernel = dP * (((G_grid / k_s) + R) / float(pg.L_m) / float(pg.n_traces))
+        T_seq = float(inp.T0) + sign_TP_in_T0_term * TP - F_per[i] * np.cumsum(kernel)
 
         T_per[i, :] = T_seq
 
@@ -274,6 +281,7 @@ def _compute_mode(
 
     T_dimv = np.sum(Tvol, axis=0) / float(V_total)
     F_total = float(np.sum(F_per))
+    print(f"{mode_name.capitalize()} mode: F_total={F_total}")
 
     return DistributionPipeThermalModeResult(
         T_dimv_C=T_dimv,
@@ -293,7 +301,6 @@ def compute_distribution_pipe_thermal_response(inp: DistributionPipeThermalInput
         mode_name="heating",
         inp=inp,
         mode=inp.heating,
-        sign_TP_in_T0_term=-1.0,  # T0 - TP - ...
     )
 
     if inp.cooling is None:
@@ -303,7 +310,6 @@ def compute_distribution_pipe_thermal_response(inp: DistributionPipeThermalInput
             mode_name="cooling",
             inp=inp,
             mode=inp.cooling,
-            sign_TP_in_T0_term=+1.0,  # legacy: T0 + TP - ...
         )
 
     return DistributionPipeThermalResult(heating=heat_res, cooling=cool_res)

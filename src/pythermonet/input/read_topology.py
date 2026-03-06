@@ -43,7 +43,7 @@ def read_undimensioned_topology_tsv_to_network(
     roughness_height: float,
     burial_depth: float,
     pipe_distance: float | None,
-    n_parallel_pipes: int = 2,
+    n_parallel_pipes: int | None,
 ) -> DistributionNetwork:
     """
     Læser undimensioneret topologi og bygger et samlet DistributionNetwork.
@@ -70,9 +70,6 @@ def read_undimensioned_topology_tsv_to_network(
     N_traces = df["Number_of_traces"].astype(int).to_numpy()
     max_pressure_loss_trace = df["Max_pressure_loss_(Pa)"].astype(float).to_numpy()
 
-    # L_segments pr. group = fwd+ret pr trace * antal traces
-    L_segments = 2.0 * L_traces * N_traces
-
     # HP grupper
     hp_id_trace = [_parse_hp_id_vector(x) for x in df["HP_ID_vector"].to_list()]
 
@@ -85,7 +82,7 @@ def read_undimensioned_topology_tsv_to_network(
             material=pipe_material,
             roughnessHeight=float(roughness_height),
             ID=int(i),
-            length=float(L_segments[i]),   # samlet længde (fwd+ret for alle traces i group)
+            length=float(L_traces[i] * n_parallel_pipes),  # The number of parallel pipes multiplied by the number of traces 
         )
         trace_segments.append(seg)
 
@@ -104,5 +101,4 @@ def read_undimensioned_topology_tsv_to_network(
         SDR=SDR,
         L_traces=L_traces,
         N_traces=N_traces,
-        L_segments=L_segments,
     )
