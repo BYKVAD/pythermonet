@@ -22,7 +22,6 @@ from pythermonet.physics.bhe_resistance import compute_rb_for_vhe_field
 from pythermonet.simulation.run_distribution_pipe_thermal import run_distribution_pipe_thermal
 import numpy as np
 
-
 # -----------------------------------------------------------------------------
 # Paths
 # -----------------------------------------------------------------------------
