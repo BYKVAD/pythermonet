@@ -15,11 +15,8 @@ from pythermonet.components.vhe_field import VHEField
 from pythermonet.core.annulus import Annulus
 from pythermonet.core.pipe_segment import PipeSegment
 
-from pythermonet.gfunctions.models import GFunctionRequest
-from pythermonet.gfunctions.service import GFunctionsService
-
 from pythermonet.physics.bhe_resistance import compute_rb_for_vhe_field
-from pythermonet.simulation.run_distribution_pipe_thermal import run_distribution_pipe_thermal
+from pythermonet.simulation.run_distribution_pipe_thermal_model import compute_distribution_pipe_thermal_capacity, print_pipe_thermal_table
 import numpy as np
 
 # -----------------------------------------------------------------------------
@@ -34,7 +31,7 @@ topology_file = PROJECT_DIR / "data/silkeborg_topology.dat"
 
 
 # -----------------------------------------------------------------------------
-# Inputs: catalogue + materials + fluids + soil
+# 1) Read pipe catalogue, define materials + fluids + soil
 # -----------------------------------------------------------------------------
 pipe_catalogue = read_pipe_catalogue(pipe_catalogue_file)
 
@@ -62,11 +59,10 @@ soil = Soil(
     surfaceTempAmp=7.9,
 )
 
-
 # -----------------------------------------------------------------------------
-# 1) Undimensioned distribution topology
+# 2) Distribution network
 # -----------------------------------------------------------------------------
-undim_network = read_undimensioned_topology_tsv_to_network(
+distribution_network_undimensioned = read_undimensioned_topology_tsv_to_network(
     topology_file,
     pipe_material=pipe_material_dist,
     roughness_height=1e-6,
@@ -75,13 +71,53 @@ undim_network = read_undimensioned_topology_tsv_to_network(
     n_parallel_pipes=2,
 )
 
+# -----------------------------------------------------------------------------
+# 3) Borehole field (only identical boreholes supported for now)
+# -----------------------------------------------------------------------------
+n_boreholes = 6
+spacing_m = 15.0
+coordinates = [[0.0, i * spacing_m] for i in range(n_boreholes)]
+borehole_diameter_m = 0.152
+r_b_m = borehole_diameter_m / 2.0
+H_m = 150.0
+D_m = 1.5
+u_pipe_outer_diameter_m = 0.04
+u_pipe_sdr = 11.0
+grout = Material(rho=1500, c=2e3, thermalCond=1.75)
+pipe_material_bhe = Material(rho=1000, c=2e3, thermalCond=0.4)
+borehole = Annulus(outerDiameter=borehole_diameter_m, SDR=1000.0)
+
+# Create the U-pipe for the borehole
+upipe = PipeSegment(
+    outerDiameter=u_pipe_outer_diameter_m,
+    SDR=u_pipe_sdr,
+    material=pipe_material_bhe,
+    roughnessHeight=1e-6,
+    ID=0,
+    length=100,  # placeholder
+)
+
+BHEfield = VHEField(
+    ID = 1,
+    HE='1U',
+    pipe = upipe,
+    borehole = borehole,
+    grout = grout,
+    coordinates=coordinates,
+    shankSpacing=0.015 + 2 * 0.02,
+    H_m=120.0,
+    D_m=1.0,
+    r_b_m=0.075,
+    tilt_rad=0.0,
+    orientation_rad=0.0,
+)
 
 # -----------------------------------------------------------------------------
-# 2) Heat pumps (carrier ONLY in HeatPumps)
+# 4) Heat pumps
 # -----------------------------------------------------------------------------
 hp_list = read_heat_pumps_tsv(path=heat_pump_file)
 
-hp = HeatPumps(
+heat_pumps = HeatPumps(
     heatPumpList=hp_list,
     brine=brine,
     peak_heating_h=4.0,
@@ -92,99 +128,65 @@ hp = HeatPumps(
     peak_fraction_cooling=1.0,
 )
 
-print("N HP:", hp.n_heat_pumps)
-print("Diversity:", hp.diversity_factor)
-print("ΔT_sys_heat [K]:", hp.deltaT_sys_heat)
-print("ΔT_sys_cool [K]:", hp.deltaT_sys_cool)
-
+# -----------------------------------------------------------------------------
+# 5) Simulation time vector
+# -----------------------------------------------------------------------------
+times_s = [
+    4 * 3600,
+    4 * 3600 + 86400 * 365.25 / 4,
+    4 * 3600 + 86400 * 365.25 / 4 + 30 * 365.25 * 86400,
+]
 
 # -----------------------------------------------------------------------------
-# 3) Hydraulic pipe sizing
+# 6) Hydraulic pipe network sizing
 # -----------------------------------------------------------------------------
 distribution_network = run_pipedimensioning(
-    pipe_catalogue=pipe_catalogue,
+    pipe_catalogue,
+    brine,
+    distribution_network_undimensioned,
+    heat_pumps,
+)
+
+#print_pipe_thermal_table(distribution_network, 2)
+
+# -----------------------------------------------------------------------------
+# 7) Distribution pipe thermal simulation
+# -----------------------------------------------------------------------------
+dist_thermal = compute_distribution_pipe_thermal_capacity(
+    network=distribution_network,
     brine=brine,
-    network=undim_network,
-    heat_pumps=hp,
+    soil=soil,
+    heat_pumps=heat_pumps,
+    times_heat_s=np.flip(times_s),
+    times_cool_s=np.flip(times_s),
+    T_brine_min_heat=-3.0,
+    T_brine_max_cool=25.0,
 )
+
+print(dist_thermal)
+### Status: dist_thermal objektet har properties der er per trace. Overvej om de skal appendes på netværksobjektet
 
 # -----------------------------------------------------------------------------
-# 4) Borehole field + g-functions
+# 8) Compute g-functions for VHE field
 # -----------------------------------------------------------------------------
-n_boreholes = 6
-spacing_m = 15.0
-borehole_diameter_m = 0.152
-r_b_m = borehole_diameter_m / 2.0
-H_m = 150.0
-D_m = 1.5
-# U-pipe geometry (legacy)
-u_pipe_outer_diameter_m = 0.04
-u_pipe_sdr = 11.0
 
-grout = Material(rho=1500, c=2e3, thermalCond=1.75)
-pipe_material_bhe = Material(rho=1000, c=2e3, thermalCond=0.4)
-borehole = Annulus(outerDiameter=borehole_diameter_m, SDR=1000.0)
-
-# Create a single "representative" pipe segment for the VHE field (U-pipe geometry)
-pipe = PipeSegment(
-    outerDiameter=u_pipe_outer_diameter_m,
-    SDR=u_pipe_sdr,
-    material=pipe_material_bhe,
-    roughnessHeight=1e-6,
-    ID=0,
-    length=1.0,  # placeholder
-)
-
-coordinates = [[0.0, i * spacing_m, 0.0] for i in range(n_boreholes)]
-
-vhe_field = VHEField(
-    ID=1,
-    HE="1U",
-    pipe=pipe,
-    borehole=borehole,
-    grout=grout,
-    coordinates=coordinates,
-    shankSpacing=0.015 + 2 * 0.02,
-)
-
-# Define borehole field
-boreholes = vhe_field.to_pygfunction_boreholes(
-    H_m=H_m,
-    D_m=D_m,
-    r_b_m=r_b_m,
-    use_z_as_depth=False,
-)
-
-# Simulation time and diffusivity
-times_s = [4 * 3600, 4 * 3600 + 86400 * 365.25 / 4, 4 * 3600 + 86400 * 365.25 / 4  + 30 * 365.25 * 86400]
-alpha_m2_s = soil.thermalCond / (soil.rho * soil.c)
-
-# Create a request object for g-functions
-req = GFunctionRequest(
+g_values = BHEfield.compute_pygfunctions(
     times_s=times_s,
-    boreholes=boreholes,
-    alpha_m2_s=alpha_m2_s,
+    alpha_m2_s=soil.thermalCond / soil.rho / soil.c,
     method="equivalent",
     boundary_condition="UHTR",
-    options={},
 )
 
-# Get g-functions (will be cached for future use)
-gset = GFunctionsService(cache=None).compute(req)
-print("Computed g-functions:", gset.g_values[:5])
-
 # -----------------------------------------------------------------------------
-# 5) Compute BHE thermal resistance from flow simulations (Rb)
+# 9) Compute BHE thermal resistance from flow simulations (Rb)
 # -----------------------------------------------------------------------------
-Q_peak_m3_s = hp.aggregated_q_peak_heat_m3_s
-print("Peak volumetric flow rate [m3/s]:", Q_peak_m3_s)
 
 rb = compute_rb_for_vhe_field(
-    vhe_field=vhe_field,
+    vhe_field=BHEfield,
     brine=brine,
     soil=soil,
     L_bhe_m=H_m,
-    m_dot_kg_s=hp.aggregated_mdot_peak_heat_kg_s / n_boreholes,
+    m_dot_kg_s=heat_pumps.aggregated_mdot_peak_heat_kg_s / n_boreholes,
     use_flow_length_correction=True,
 )
 
@@ -192,17 +194,7 @@ print("Rb [K*m/W] =", rb.Rb_K_m_W)
 print("Re, Pr     =", rb.Re, rb.Pr)
 
 # -----------------------------------------------------------------------------
-# 6) Distribution pipe thermal simulation
+# 10) Compute fractions of thermal loads supplied by the boreholes
 # -----------------------------------------------------------------------------
-dist_therm = run_distribution_pipe_thermal(
-    network=distribution_network,
-    brine=brine,
-    soil=soil,
-    heat_pumps=hp,
-    times_heat_s=np.flip(times_s),
-    times_cool_s=np.flip(times_s),
-    T_brine_min_heat=-3.0,
-    T_brine_max_cool=25.0,
-)
-
-print("T_dimv (heating) [°C]:", dist_therm.heating.T_dimv_C)
+P_heating = (1 - dist_thermal["heating"].F_total)*heat_pumps.heating_ground_load_W
+P_cooling = (1 - dist_thermal["cooling"].F_total)*heat_pumps.cooling_ground_load_W
