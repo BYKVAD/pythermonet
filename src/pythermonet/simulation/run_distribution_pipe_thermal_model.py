@@ -5,6 +5,7 @@ import numpy as np
 
 from pythermonet.core.heat_carrier import HeatCarrier
 from pythermonet.core.soil import Soil
+from pythermonet.dimensioning.hydraulic_result import HydraulicResult
 from pythermonet.simulation.distribution_pipe_thermal_model import (
     PipeGroup,
     ModeInput,
@@ -14,31 +15,14 @@ from pythermonet.simulation.distribution_pipe_thermal_model import (
 )
 
 
-def _build_pipe_groups_from_network(*, network, Re_arr: np.ndarray) -> list[PipeGroup]:
+def _build_pipe_groups_from_hydraulic(hydraulic: HydraulicResult, Re_arr: np.ndarray) -> list[PipeGroup]:
+    network = hydraulic.network
     L_oneway = np.asarray(network.L_traces, dtype=float)
     npp = int(network.infrastructure.NParallelPipes)
-
-    Do = np.asarray(
-        [seg.outerDiameter for seg in network.infrastructure.traceSegments],
-        dtype=float,
-    )
-    SDR = np.asarray(network.SDR, dtype=float)
-    Re_arr = np.asarray(Re_arr, dtype=float)
     n_traces = np.asarray(network.N_traces, dtype=int)
-
-    if SDR.ndim == 0:
-        SDR = np.full_like(Do, float(SDR), dtype=float)
-
-    if not (len(L_oneway) == len(Do) == len(SDR) == len(Re_arr) == len(n_traces)):
-        raise ValueError(
-            "Inconsistent lengths in network data: "
-            f"L_traces={len(L_oneway)}, Do={len(Do)}, SDR={len(SDR)}, "
-            f"Re_arr={len(Re_arr)}, N_traces={len(n_traces)}"
-        )
+    Re_arr = np.asarray(Re_arr, dtype=float)
 
     L_m = npp * L_oneway
-    Di = Do * (1.0 - 2.0 / SDR)
-
     pipe_spacing_m = float(network.infrastructure.pipeDistance) if npp > 1 else None
     burial_depth_m = float(network.infrastructure.burialDepth)
     k_pipe_W_mK = float(network.globalMaterial.thermalCond)
@@ -49,8 +33,8 @@ def _build_pipe_groups_from_network(*, network, Re_arr: np.ndarray) -> list[Pipe
             PipeGroup(
                 ID=i,
                 L_m=float(L_m[i]),
-                Di_m=float(Di[i]),
-                Do_m=float(Do[i]),
+                Di_m=float(hydraulic.inner_diameter[i]),
+                Do_m=float(hydraulic.outer_diameter[i]),
                 Re=float(Re_arr[i]),
                 k_pipe_W_mK=k_pipe_W_mK,
                 burial_depth_m=burial_depth_m,
@@ -64,7 +48,7 @@ def _build_pipe_groups_from_network(*, network, Re_arr: np.ndarray) -> list[Pipe
 
 def compute_distribution_pipe_thermal_capacity(
     *,
-    network,
+    hydraulic: HydraulicResult,
     brine: HeatCarrier,
     soil: Soil,
     heat_pumps,
@@ -74,7 +58,6 @@ def compute_distribution_pipe_thermal_capacity(
     T_brine_max_cool: Optional[float] = None,
 ) -> dict[str, ModeResult]:
     P_heat = np.asarray(heat_pumps.heating_ground_load_W, dtype=float)
-    Re_heat = np.asarray(network.dimensionedPipeReynoldsNumberHeating, dtype=float)
 
     heating = ModeInput(
         times_s=np.asarray(times_heat_s, dtype=float),
@@ -83,7 +66,7 @@ def compute_distribution_pipe_thermal_capacity(
         To_C=float(T_brine_min_heat - heat_pumps.deltaT_sys_heat),
     )
 
-    pipe_groups = _build_pipe_groups_from_network(network=network, Re_arr=Re_heat)
+    pipe_groups = _build_pipe_groups_from_hydraulic(hydraulic, Re_arr=hydraulic.Re_heating)
 
     cooling = None
     P_cool = getattr(heat_pumps, "cooling_ground_load_W", None)

@@ -6,6 +6,7 @@ from pythermonet.physics.hydraulics import pressure_loss_per_length as dp
 from pythermonet.physics.hydraulics import reynolds_number as Re
 from pythermonet.logging_config import get_logger
 from pythermonet.system.diversity_factor import diversity_factor_from_n_heat_pumps
+from pythermonet.dimensioning.hydraulic_result import HydraulicResult
 
 logger = get_logger(__name__)
 
@@ -15,18 +16,13 @@ def run_pipedimensioning(
     brine,            # HeatCarrier (rho, c, dynamicViscosity)
     network,          # DistributionNetwork
     heat_pumps,       # HeatPumps
-):
+) -> HydraulicResult:
     """
     Dimensionerer distributionsrør pr. trace ud fra tryktabskriterium i både
     heating og cooling mode og vælger den største nødvendige diameter pr. trace.
 
-    Slutresultatet er ét installeret netværk, ikke to separate netværk.
-
-    Der gemmes:
-      - installeret outer diameter på hvert repræsentativt trace segment
-      - governing mode pr. trace: "heating" | "cooling" | "equal"
-      - Reynolds-tal for installeret net i heating og cooling
-      - tryktab for installeret net i heating og cooling
+    Returnerer et HydraulicResult med alle dimensioneringsresultater.
+    Netværksobjektet muteres ikke.
     """
 
     # Sortér unikke outer diameters fra kataloget
@@ -169,37 +165,21 @@ def run_pipedimensioning(
             governing_mode[i] = "heating"
 
     # ------------------------------------------------------------------
-    # 3) Opdater installeret netværk
-    # ------------------------------------------------------------------
-    for i, seg in enumerate(network.infrastructure.traceSegments):
-        seg.outerDiameter = float(selected_outer_diameter[i])
-
-    network.dimensioningModeGoverning = np.asarray(governing_mode, dtype=object)
-    network.m3_s_per_trace_heating = m3_s_per_trace_heating
-
-    if doCooling:
-        network.m3_s_per_trace_cooling = m3_s_per_trace_cooling
-
-    # ------------------------------------------------------------------
-    # 4) Beregn Reynolds-tal og tryktab for det installerede netværk
+    # 3) Beregn Reynolds-tal og tryktab for det installerede netværk
     #    i begge modes
     # ------------------------------------------------------------------
-    installed_outer_diameter = np.asarray(
-        [seg.outerDiameter for seg in network.infrastructure.traceSegments],
-        dtype=float,
-    )
-    installed_inner_diameter = installed_outer_diameter * (1.0 - 2.0 / SDR_arr)
+    installed_inner_diameter = selected_outer_diameter * (1.0 - 2.0 / SDR_arr)
     L_tot_arr = n_parallel_pipes * L_trace_arr
 
     v_H = m3_s_per_trace_heating / (np.pi * installed_inner_diameter**2 / 4.0)
-    network.dimensionedPipeReynoldsNumberHeating = np.array(
+    Re_heating = np.array(
         [
             Re(brine.rho, brine.dynamicViscosity, abs(float(v)), float(d))
             for v, d in zip(v_H, installed_inner_diameter)
         ],
         dtype=float,
     )
-    network.pressureLossTraceHeating = np.array(
+    dp_heating = np.array(
         [
             L_tot_arr[i] * dp(
                 brine.rho,
@@ -212,16 +192,18 @@ def run_pipedimensioning(
         dtype=float,
     )
 
+    Re_cooling = None
+    dp_cooling = None
     if doCooling:
         v_C = m3_s_per_trace_cooling / (np.pi * installed_inner_diameter**2 / 4.0)
-        network.dimensionedPipeReynoldsNumberCooling = np.array(
+        Re_cooling = np.array(
             [
                 Re(brine.rho, brine.dynamicViscosity, abs(float(v)), float(d))
                 for v, d in zip(v_C, installed_inner_diameter)
             ],
             dtype=float,
         )
-        network.pressureLossTraceCooling = np.array(
+        dp_cooling = np.array(
             [
                 L_tot_arr[i] * dp(
                     brine.rho,
@@ -234,27 +216,26 @@ def run_pipedimensioning(
             dtype=float,
         )
 
-    # logger.info(
-    #     "Hydraulic pipe dimensioning complete. doCooling=%s, N_traces=%s",
-    #     doCooling,
-    #     N_trace,
-    # )
+    return HydraulicResult(
+        network=network,
+        outer_diameter=selected_outer_diameter,
+        inner_diameter=installed_inner_diameter,
+        governing_mode=np.asarray(governing_mode, dtype=object),
+        m3_s_heating=m3_s_per_trace_heating,
+        m3_s_cooling=m3_s_per_trace_cooling,
+        Re_heating=Re_heating,
+        Re_cooling=Re_cooling,
+        dp_heating=dp_heating,
+        dp_cooling=dp_cooling,
+    )
 
-    return network
-
-def print_pipe_dimensioning_table(network, brine):
+def print_pipe_dimensioning_table(hydraulic: HydraulicResult):
     """
     Printer en tabel for det installerede trace-netværk.
     """
 
-    N = len(network.L_traces)
-
-    Do = np.asarray(
-        [seg.outerDiameter for seg in network.infrastructure.traceSegments],
-        dtype=float,
-    )
-    SDR = np.asarray(network.SDR, dtype=float)
-    Di = Do * (1.0 - 2.0 / SDR)
+    N = len(hydraulic.outer_diameter)
+    doCooling = hydraulic.Re_cooling is not None
 
     header_parts = [
         f"{'Trace':>6}",
@@ -265,7 +246,6 @@ def print_pipe_dimensioning_table(network, brine):
         f"{'dp_heat [kPa]':>14}",
     ]
 
-    doCooling = hasattr(network, "dimensionedPipeReynoldsNumberCooling")
     if doCooling:
         header_parts += [
             f"{'Re_cool':>12}",
@@ -281,17 +261,17 @@ def print_pipe_dimensioning_table(network, brine):
     for i in range(N):
         row_parts = [
             f"{i:6d}",
-            f"{str(network.dimensioningModeGoverning[i]):>10}",
-            f"{Do[i] * 1000:10.1f}",
-            f"{Di[i] * 1000:10.1f}",
-            f"{network.dimensionedPipeReynoldsNumberHeating[i]:12.0f}",
-            f"{network.pressureLossTraceHeating[i] / 1000:14.2f}",
+            f"{str(hydraulic.governing_mode[i]):>10}",
+            f"{hydraulic.outer_diameter[i] * 1000:10.1f}",
+            f"{hydraulic.inner_diameter[i] * 1000:10.1f}",
+            f"{hydraulic.Re_heating[i]:12.0f}",
+            f"{hydraulic.dp_heating[i] / 1000:14.2f}",
         ]
 
         if doCooling:
             row_parts += [
-                f"{network.dimensionedPipeReynoldsNumberCooling[i]:12.0f}",
-                f"{network.pressureLossTraceCooling[i] / 1000:14.2f}",
+                f"{hydraulic.Re_cooling[i]:12.0f}",
+                f"{hydraulic.dp_cooling[i] / 1000:14.2f}",
             ]
 
         print(" ".join(row_parts))

@@ -140,20 +140,18 @@ times_s = [
 # -----------------------------------------------------------------------------
 # 6) Hydraulic pipe network sizing
 # -----------------------------------------------------------------------------
-distribution_network = run_pipedimensioning(
+hydraulic = run_pipedimensioning(
     pipe_catalogue,
     brine,
     distribution_network_undimensioned,
     heat_pumps,
 )
 
-#print_pipe_thermal_table(distribution_network, 2)
-
 # -----------------------------------------------------------------------------
 # 7) Distribution pipe thermal simulation
 # -----------------------------------------------------------------------------
 dist_thermal = compute_distribution_pipe_thermal_capacity(
-    network=distribution_network,
+    hydraulic=hydraulic,
     brine=brine,
     soil=soil,
     heat_pumps=heat_pumps,
