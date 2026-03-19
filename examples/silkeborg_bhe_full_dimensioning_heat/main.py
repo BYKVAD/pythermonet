@@ -17,6 +17,8 @@ from pythermonet.core.pipe_segment import PipeSegment
 
 from pythermonet.physics.bhe_resistance import compute_rb_for_vhe_field
 from pythermonet.simulation.run_distribution_pipe_thermal_model import compute_distribution_pipe_thermal_capacity, print_pipe_thermal_table
+from pythermonet.dimensioning.borehole_length import size_borehole_length_heating_cooling
+from pythermonet.dimensioning.system_temperatures import compute_system_brine_temperatures
 import numpy as np
 
 # -----------------------------------------------------------------------------
@@ -26,7 +28,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PROJECT_DIR.parents[2]
 
 pipe_catalogue_file = REPO_ROOT / "PythermonetII/src/pythermonet/resources/pipe_catalogue.csv"
-heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat.dat"
+heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat_only.dat"
 topology_file = PROJECT_DIR / "data/silkeborg_topology.dat"
 
 
@@ -49,13 +51,13 @@ brine = HeatCarrier(
 )
 
 soil = Soil(
-    rho=2500,
+    rho=2650,
     c=1000,
     thermalCond=2.36,
     thermalCondShallowHeating=1.25,
     thermalCondShallowCooling=1.25,
-    Qgeo=0.01,
-    surfaceTemp=9,
+    Qgeo=0.0185,
+    surfaceTemp=9.03,
     surfaceTempAmp=7.9,
 )
 
@@ -129,7 +131,13 @@ heat_pumps = HeatPumps(
 )
 
 # -----------------------------------------------------------------------------
-# 5) Simulation time vector
+# 5) Brine temperature limits
+# -----------------------------------------------------------------------------
+T_BRINE_MIN_HEAT = -3.0   # HP evaporator inlet limit [°C]
+T_BRINE_MAX_COOL = 25.0   # HP condenser inlet limit [°C]
+
+# -----------------------------------------------------------------------------
+# 6) Simulation time vector
 # -----------------------------------------------------------------------------
 times_s = [
     4 * 3600,
@@ -138,7 +146,7 @@ times_s = [
 ]
 
 # -----------------------------------------------------------------------------
-# 6) Hydraulic pipe network sizing
+# 7) Hydraulic pipe network sizing
 # -----------------------------------------------------------------------------
 hydraulic = run_pipedimensioning(
     pipe_catalogue,
@@ -156,43 +164,71 @@ dist_thermal = compute_distribution_pipe_thermal_capacity(
     soil=soil,
     heat_pumps=heat_pumps,
     times_heat_s=np.flip(times_s),
-    times_cool_s=np.flip(times_s),
-    T_brine_min_heat=-3.0,
-    T_brine_max_cool=25.0,
-)
-
-print(dist_thermal)
-### Status: dist_thermal objektet har properties der er per trace. Overvej om de skal appendes på netværksobjektet
-
-# -----------------------------------------------------------------------------
-# 8) Compute g-functions for VHE field
-# -----------------------------------------------------------------------------
-
-g_values = BHEfield.compute_pygfunctions(
-    times_s=times_s,
-    alpha_m2_s=soil.thermalCond / soil.rho / soil.c,
-    method="equivalent",
-    boundary_condition="UHTR",
+    times_cool_s=np.flip(times_s) if heat_pumps.has_cooling else None,
+    T_brine_min_heat=T_BRINE_MIN_HEAT,
+    T_brine_max_cool=T_BRINE_MAX_COOL if heat_pumps.has_cooling else None,
 )
 
 # -----------------------------------------------------------------------------
-# 9) Compute BHE thermal resistance from flow simulations (Rb)
+# 8) Compute fractions of thermal loads supplied by the boreholes
 # -----------------------------------------------------------------------------
+P_heating = (1 - dist_thermal["heating"].F_total) * heat_pumps.heating_ground_load_W
+P_cooling = (
+    (1 - dist_thermal["cooling"].F_total) * heat_pumps.cooling_ground_load_W
+    if heat_pumps.has_cooling else None
+)
+print(P_heating)
+print(dist_thermal["heating"].F_total)
+# -----------------------------------------------------------------------------
+# 9) Size borehole length from heating and cooling constraints
+# -----------------------------------------------------------------------------
+print(f"BHE heating loads [annual / winter / peak] [W]: "
+      f"{P_heating[0]:.0f} / {P_heating[1]:.0f} / {P_heating[2]:.0f}")
+if P_cooling is not None:
+    print(f"BHE cooling loads [annual / winter / peak] [W]: "
+          f"{P_cooling[0]:.0f} / {P_cooling[1]:.0f} / {P_cooling[2]:.0f}")
 
-rb = compute_rb_for_vhe_field(
+sizing = size_borehole_length_heating_cooling(
+    T_fluid_min=T_BRINE_MIN_HEAT - 0.5 * heat_pumps.deltaT_sys_heat,
+    P_heating_W=P_heating,
+    times_heat_s=times_s,
+    T_fluid_max=T_BRINE_MAX_COOL + (0.5 * heat_pumps.deltaT_sys_cool if heat_pumps.has_cooling else 0.0),
+    P_cooling_W=P_cooling,
+    times_cool_s=times_s if heat_pumps.has_cooling else None,
     vhe_field=BHEfield,
     brine=brine,
     soil=soil,
-    L_bhe_m=H_m,
-    m_dot_kg_s=heat_pumps.aggregated_mdot_peak_heat_kg_s / n_boreholes,
-    use_flow_length_correction=True,
+    m_dot_per_borehole_heat_kg_s=heat_pumps.aggregated_mdot_peak_heat_kg_s / n_boreholes,
+    m_dot_per_borehole_cool_kg_s=(
+        heat_pumps.aggregated_mdot_peak_cool_kg_s / n_boreholes
+        if heat_pumps.has_cooling else None
+    ),
 )
-
-print("Rb [K*m/W] =", rb.Rb_K_m_W)
-print("Re, Pr     =", rb.Re, rb.Pr)
+print(f"Required borehole length: {sizing.H_m:.8f} m (governed by {sizing.governing})")
+print(f"Rb heating [K·m/W]: {sizing.rb_heating.Rb_K_m_W:.4f}")
+if sizing.rb_cooling is not None:
+    print(f"Rb cooling [K·m/W]: {sizing.rb_cooling.Rb_K_m_W:.4f}")
 
 # -----------------------------------------------------------------------------
-# 10) Compute fractions of thermal loads supplied by the boreholes
+# 12) System mean brine temperatures
 # -----------------------------------------------------------------------------
-P_heating = (1 - dist_thermal["heating"].F_total)*heat_pumps.heating_ground_load_W
-P_cooling = (1 - dist_thermal["cooling"].F_total)*heat_pumps.cooling_ground_load_W
+sys_temps = compute_system_brine_temperatures(
+    sizing=sizing,
+    vhe_field=BHEfield,
+    hydraulic=hydraulic,
+    heat_pumps=heat_pumps,
+    P_heating_W=P_heating,
+    times_heat_s=times_s,
+    P_cooling_W=P_cooling,
+    times_cool_s=times_s if heat_pumps.has_cooling else None,
+    soil=soil,
+    dist_thermal_heat=dist_thermal["heating"],
+    dist_thermal_cool=dist_thermal["cooling"] if heat_pumps.has_cooling else None,
+)
+print(f"Mean brine temp heating  [annual / winter / peak]: "
+      f"{sys_temps.T_avg_heat_annual_C:.2f} / {sys_temps.T_avg_heat_winter_C:.2f} / {sys_temps.T_avg_heat_peak_C:.2f} °C")
+if sys_temps.T_avg_cool_peak_C is not None:
+    print(f"Mean brine temp cooling  [annual / winter / peak]: "
+          f"{sys_temps.T_avg_cool_annual_C:.2f} / {sys_temps.T_avg_cool_winter_C:.2f} / {sys_temps.T_avg_cool_peak_C:.2f} °C")
+print(f"BHE fluid volume:  {sys_temps.V_bhe_m3:.3f} m³  ({sys_temps.bhe_fraction*100:.1f}% of total)")
+print(f"Dist fluid volume: {sys_temps.V_dist_m3:.3f} m³  ({(1-sys_temps.bhe_fraction)*100:.1f}% of total)")

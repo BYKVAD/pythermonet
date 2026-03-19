@@ -134,7 +134,7 @@ class VHEField:
         self,
         times_s,
         alpha_m2_s: float,
-        method: str = "equivalent",
+        method: str = "detailed",
         boundary_condition: str = "UHTR",
         options: dict | None = None,
     ) -> np.ndarray:
