@@ -6,6 +6,7 @@ import numpy as np
 from pythermonet.core.heat_carrier import HeatCarrier
 from pythermonet.core.soil import Soil
 from pythermonet.dimensioning.hydraulic_result import HydraulicResult
+from pythermonet.dimensioning.borehole_length import apply_annual_balance
 from pythermonet.simulation.distribution_pipe_thermal_model import (
     PipeGroup,
     ModeInput,
@@ -58,6 +59,10 @@ def compute_distribution_pipe_thermal_capacity(
     T_brine_max_cool: Optional[float] = None,
 ) -> dict[str, ModeResult]:
     P_heat = np.asarray(heat_pumps.heating_ground_load_W, dtype=float)
+    P_cool = getattr(heat_pumps, "cooling_ground_load_W", None)
+
+    if P_cool is not None:
+        P_heat, P_cool = apply_annual_balance(P_heat, np.asarray(P_cool, dtype=float))
 
     heating = ModeInput(
         times_s=np.asarray(times_heat_s, dtype=float),
@@ -69,7 +74,6 @@ def compute_distribution_pipe_thermal_capacity(
     pipe_groups = _build_pipe_groups_from_hydraulic(hydraulic, Re_arr=hydraulic.Re_heating)
 
     cooling = None
-    P_cool = getattr(heat_pumps, "cooling_ground_load_W", None)
 
     if P_cool is not None:
         if times_cool_s is None:

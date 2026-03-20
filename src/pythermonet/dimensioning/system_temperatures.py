@@ -50,6 +50,22 @@ class SystemBrineTemperatureResult:
     T_avg_cool_winter_C: float | None
     T_avg_cool_peak_C: float | None
 
+    T_bhe_heat_annual_C: float
+    T_bhe_heat_winter_C: float
+    T_bhe_heat_peak_C: float
+
+    T_bhe_cool_annual_C: float | None
+    T_bhe_cool_winter_C: float | None
+    T_bhe_cool_peak_C: float | None
+
+    T_dist_heat_annual_C: float | None
+    T_dist_heat_winter_C: float | None
+    T_dist_heat_peak_C: float | None
+
+    T_dist_cool_annual_C: float | None
+    T_dist_cool_winter_C: float | None
+    T_dist_cool_peak_C: float | None
+
     V_bhe_m3: float
     V_dist_m3: float
     V_total_m3: float
@@ -135,6 +151,7 @@ def compute_system_brine_temperatures(
     soil: Soil,
     dist_thermal_heat: DistModeResult | None = None,
     dist_thermal_cool: DistModeResult | None = None,
+    pre_balanced: bool = False,
 ) -> SystemBrineTemperatureResult:
     """
     Compute volume-weighted mean brine temperatures for all three load pulses.
@@ -175,7 +192,7 @@ def compute_system_brine_temperatures(
     alpha = float(soil.thermalCond) / (float(soil.rho) * float(soil.c))
     P_heating_W = np.asarray(P_heating_W, dtype=float)
 
-    if has_cooling:
+    if has_cooling and not pre_balanced:
         P_heating_W, P_cooling_W = apply_annual_balance(
             P_heating_W, np.asarray(P_cooling_W, dtype=float)
         )
@@ -222,8 +239,15 @@ def compute_system_brine_temperatures(
     # ordered [annual, winter, peak].
     # When not provided (backward-compatible) only the BHE mean is used.
     # ------------------------------------------------------------------
+    T_dist_heat_ann: float | None = None
+    T_dist_heat_win: float | None = None
+    T_dist_heat_peak_val: float | None = None
+
     if dist_thermal_heat is not None:
         T_d = np.asarray(dist_thermal_heat.T_dimv_C, dtype=float)  # [annual, winter, peak]
+        T_dist_heat_ann  = float(T_d[0])
+        T_dist_heat_win  = float(T_d[1])
+        T_dist_heat_peak_val = float(T_d[2])
         T_avg_heat_annual = (V_bhe * T_h_ann  + V_dist * T_d[0]) / V_total
         T_avg_heat_winter = (V_bhe * T_h_win  + V_dist * T_d[1]) / V_total
         T_avg_heat_peak   = (V_bhe * T_h_peak + V_dist * T_d[2]) / V_total
@@ -233,6 +257,10 @@ def compute_system_brine_temperatures(
         T_avg_heat_peak   = T_h_peak
 
     T_avg_cool_annual = T_avg_cool_winter = T_avg_cool_peak = None
+    T_c_ann = T_c_win = T_c_peak = None
+    T_dist_cool_ann: float | None = None
+    T_dist_cool_win: float | None = None
+    T_dist_cool_peak_val: float | None = None
 
     if has_cooling:
         g_cool = field_H.compute_pygfunctions(
@@ -243,6 +271,9 @@ def compute_system_brine_temperatures(
         )
         if dist_thermal_cool is not None:
             T_dc = np.asarray(dist_thermal_cool.T_dimv_C, dtype=float)
+            T_dist_cool_ann  = float(T_dc[0])
+            T_dist_cool_win  = float(T_dc[1])
+            T_dist_cool_peak_val = float(T_dc[2])
             T_avg_cool_annual = (V_bhe * T_c_ann  + V_dist * T_dc[0]) / V_total
             T_avg_cool_winter = (V_bhe * T_c_win  + V_dist * T_dc[1]) / V_total
             T_avg_cool_peak   = (V_bhe * T_c_peak + V_dist * T_dc[2]) / V_total
@@ -258,6 +289,18 @@ def compute_system_brine_temperatures(
         T_avg_cool_annual_C=T_avg_cool_annual,
         T_avg_cool_winter_C=T_avg_cool_winter,
         T_avg_cool_peak_C=T_avg_cool_peak,
+        T_bhe_heat_annual_C=T_h_ann,
+        T_bhe_heat_winter_C=T_h_win,
+        T_bhe_heat_peak_C=T_h_peak,
+        T_bhe_cool_annual_C=T_c_ann,
+        T_bhe_cool_winter_C=T_c_win,
+        T_bhe_cool_peak_C=T_c_peak,
+        T_dist_heat_annual_C=T_dist_heat_ann,
+        T_dist_heat_winter_C=T_dist_heat_win,
+        T_dist_heat_peak_C=T_dist_heat_peak_val,
+        T_dist_cool_annual_C=T_dist_cool_ann,
+        T_dist_cool_winter_C=T_dist_cool_win,
+        T_dist_cool_peak_C=T_dist_cool_peak_val,
         V_bhe_m3=V_bhe,
         V_dist_m3=V_dist,
         V_total_m3=V_total,

@@ -17,7 +17,7 @@ from pythermonet.core.pipe_segment import PipeSegment
 
 from pythermonet.physics.bhe_resistance import compute_rb_for_vhe_field
 from pythermonet.simulation.run_distribution_pipe_thermal_model import compute_distribution_pipe_thermal_capacity, print_pipe_thermal_table
-from pythermonet.dimensioning.borehole_length import size_borehole_length_heating_cooling
+from pythermonet.dimensioning.borehole_length import size_borehole_length_heating_cooling, apply_annual_balance
 from pythermonet.dimensioning.system_temperatures import compute_system_brine_temperatures
 import numpy as np
 
@@ -28,7 +28,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PROJECT_DIR.parents[2]
 
 pipe_catalogue_file = REPO_ROOT / "PythermonetII/src/pythermonet/resources/pipe_catalogue.csv"
-heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat_only.dat"
+heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat.dat"
 topology_file = PROJECT_DIR / "data/silkeborg_topology.dat"
 
 
@@ -158,6 +158,16 @@ hydraulic = run_pipedimensioning(
 # -----------------------------------------------------------------------------
 # 7) Distribution pipe thermal simulation
 # -----------------------------------------------------------------------------
+_P_heat_full = np.asarray(heat_pumps.heating_ground_load_W, dtype=float)
+_P_cool_full = np.asarray(heat_pumps.cooling_ground_load_W, dtype=float) if heat_pumps.has_cooling else None
+if _P_cool_full is not None:
+    _P_heat_full, _P_cool_full = apply_annual_balance(_P_heat_full.copy(), _P_cool_full.copy())
+print(f"Full heating ground load after annual balance [annual / winter / peak] [W]: "
+      f"{_P_heat_full[0]:.0f} / {_P_heat_full[1]:.0f} / {_P_heat_full[2]:.0f}")
+if _P_cool_full is not None:
+    print(f"Full cooling ground load after annual balance [annual / winter / peak] [W]: "
+          f"{_P_cool_full[0]:.0f} / {_P_cool_full[1]:.0f} / {_P_cool_full[2]:.0f}")
+
 dist_thermal = compute_distribution_pipe_thermal_capacity(
     hydraulic=hydraulic,
     brine=brine,
@@ -171,23 +181,24 @@ dist_thermal = compute_distribution_pipe_thermal_capacity(
 
 # -----------------------------------------------------------------------------
 # 8) Compute fractions of thermal loads supplied by the boreholes
+# BHE loads = balanced full loads × (1 − distribution fraction)
+# Balance was already applied once before distribution pipe simulation.
 # -----------------------------------------------------------------------------
-P_heating = (1 - dist_thermal["heating"].F_total) * heat_pumps.heating_ground_load_W
+P_heating = (1 - dist_thermal["heating"].F_total) * _P_heat_full
 P_cooling = (
-    (1 - dist_thermal["cooling"].F_total) * heat_pumps.cooling_ground_load_W
+    (1 - dist_thermal["cooling"].F_total) * _P_cool_full
     if heat_pumps.has_cooling else None
 )
-print(P_heating)
-print(dist_thermal["heating"].F_total)
+
+print(f"BHE heating loads after annual balance [annual / winter / peak] [W]: "
+      f"{P_heating[0]:.0f} / {P_heating[1]:.0f} / {P_heating[2]:.0f}")
+if P_cooling is not None:
+    print(f"BHE cooling loads after annual balance [annual / winter / peak] [W]: "
+          f"{P_cooling[0]:.0f} / {P_cooling[1]:.0f} / {P_cooling[2]:.0f}")
+
 # -----------------------------------------------------------------------------
 # 9) Size borehole length from heating and cooling constraints
 # -----------------------------------------------------------------------------
-print(f"BHE heating loads [annual / winter / peak] [W]: "
-      f"{P_heating[0]:.0f} / {P_heating[1]:.0f} / {P_heating[2]:.0f}")
-if P_cooling is not None:
-    print(f"BHE cooling loads [annual / winter / peak] [W]: "
-          f"{P_cooling[0]:.0f} / {P_cooling[1]:.0f} / {P_cooling[2]:.0f}")
-
 sizing = size_borehole_length_heating_cooling(
     T_fluid_min=T_BRINE_MIN_HEAT - 0.5 * heat_pumps.deltaT_sys_heat,
     P_heating_W=P_heating,
@@ -203,6 +214,7 @@ sizing = size_borehole_length_heating_cooling(
         heat_pumps.aggregated_mdot_peak_cool_kg_s / n_boreholes
         if heat_pumps.has_cooling else None
     ),
+    pre_balanced=True,
 )
 print(f"Required borehole length: {sizing.H_m:.8f} m (governed by {sizing.governing})")
 print(f"Rb heating [K·m/W]: {sizing.rb_heating.Rb_K_m_W:.4f}")
@@ -224,11 +236,22 @@ sys_temps = compute_system_brine_temperatures(
     soil=soil,
     dist_thermal_heat=dist_thermal["heating"],
     dist_thermal_cool=dist_thermal["cooling"] if heat_pumps.has_cooling else None,
+    pre_balanced=True,
 )
-print(f"Mean brine temp heating  [annual / winter / peak]: "
+print(f"BHE  mean temp heating   [annual / winter / peak]: "
+      f"{sys_temps.T_bhe_heat_annual_C:.2f} / {sys_temps.T_bhe_heat_winter_C:.2f} / {sys_temps.T_bhe_heat_peak_C:.2f} °C")
+if sys_temps.T_dist_heat_annual_C is not None:
+    print(f"Dist mean temp heating   [annual / winter / peak]: "
+          f"{sys_temps.T_dist_heat_annual_C:.2f} / {sys_temps.T_dist_heat_winter_C:.2f} / {sys_temps.T_dist_heat_peak_C:.2f} °C")
+print(f"System mean temp heating [annual / winter / peak]: "
       f"{sys_temps.T_avg_heat_annual_C:.2f} / {sys_temps.T_avg_heat_winter_C:.2f} / {sys_temps.T_avg_heat_peak_C:.2f} °C")
 if sys_temps.T_avg_cool_peak_C is not None:
-    print(f"Mean brine temp cooling  [annual / winter / peak]: "
+    print(f"BHE  mean temp cooling   [annual / winter / peak]: "
+          f"{sys_temps.T_bhe_cool_annual_C:.2f} / {sys_temps.T_bhe_cool_winter_C:.2f} / {sys_temps.T_bhe_cool_peak_C:.2f} °C")
+    if sys_temps.T_dist_cool_annual_C is not None:
+        print(f"Dist mean temp cooling   [annual / winter / peak]: "
+              f"{sys_temps.T_dist_cool_annual_C:.2f} / {sys_temps.T_dist_cool_winter_C:.2f} / {sys_temps.T_dist_cool_peak_C:.2f} °C")
+    print(f"System mean temp cooling [annual / winter / peak]: "
           f"{sys_temps.T_avg_cool_annual_C:.2f} / {sys_temps.T_avg_cool_winter_C:.2f} / {sys_temps.T_avg_cool_peak_C:.2f} °C")
 print(f"BHE fluid volume:  {sys_temps.V_bhe_m3:.3f} m³  ({sys_temps.bhe_fraction*100:.1f}% of total)")
 print(f"Dist fluid volume: {sys_temps.V_dist_m3:.3f} m³  ({(1-sys_temps.bhe_fraction)*100:.1f}% of total)")

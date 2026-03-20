@@ -387,6 +387,7 @@ def size_borehole_length_heating_cooling(
     H_min: float = 50.0,
     H_max: float = 500.0,
     tol_m: float = 0.01,
+    pre_balanced: bool = False,
 ) -> BoreholeSizingResult:
     """
     Find the minimum borehole length satisfying both heating and cooling
@@ -420,7 +421,8 @@ def size_borehole_length_heating_cooling(
 
     if has_cooling:
         times_cool_s = np.asarray(times_cool_s, dtype=float)
-        P_heating_W, P_cooling_W = apply_annual_balance(P_heating_W, np.asarray(P_cooling_W, dtype=float))
+        if not pre_balanced:
+            P_heating_W, P_cooling_W = apply_annual_balance(P_heating_W, np.asarray(P_cooling_W, dtype=float))
 
     def _rb_final(H: float, m_dot: float) -> BHEResistanceResult:
         return compute_rb_for_vhe_field(

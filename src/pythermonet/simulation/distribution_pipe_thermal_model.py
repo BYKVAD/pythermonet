@@ -322,8 +322,8 @@ def _compute_mode(
         F_per_group[i] = F_i
 
         T_seq_C = float(model.T0_C) + tp_sign * TP_C - F_i * np.cumsum(dP * kernel)
-
-        volume_m3 = float(pg.L_m) * math.pi * float(pg.Di_m) ** 2 / 4.0
+     
+        volume_m3 = float(pg.n_traces) * float(pg.L_m) * math.pi * float(pg.Di_m) ** 2 / 4.0
         total_volume_m3 += volume_m3
         T_volume_weighted[i, :] = T_seq_C * volume_m3
 
