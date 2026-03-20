@@ -28,7 +28,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PROJECT_DIR.parents[2]
 
 pipe_catalogue_file = REPO_ROOT / "PythermonetII/src/pythermonet/resources/pipe_catalogue.csv"
-heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat.dat"
+heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat.dat" #test commit
 topology_file = PROJECT_DIR / "data/silkeborg_topology.dat"
 
 
