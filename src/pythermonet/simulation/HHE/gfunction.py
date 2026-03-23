@@ -88,7 +88,7 @@ class HHEGFunction:
         self._depth = pipe_infrastructure.burialDepth
         self._pipe_dist = pipe_infrastructure.pipeDistance or 0.0
         self._trace = pipe_infrastructure.traceSegments
-        self._r_pipe = self._trace[0].outerRadius   # same for all segments
+        self._r_pipe = (self._trace[0].outerDiameter / 2.0) if self._trace[0].outerDiameter is not None else 0.0
 
         # Pre-compute x start positions along the trace
         self._x_starts = [

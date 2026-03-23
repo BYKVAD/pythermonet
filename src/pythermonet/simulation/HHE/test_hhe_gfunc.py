@@ -26,12 +26,15 @@ import argparse
 import numpy as np
 from scipy.special import exp1
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+# Ensure local src/ takes precedence over any globally installed pythermonet package.
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-import hhe_gfunc as hhe
-from hhe_gfunc._pythermonet_stubs import (
-    Material, PipeSegment, PipeInfrastructure
-)
+import pythermonet.simulation.HHE as hhe
+from pythermonet.core.material import Material 
+from pythermonet.core.pipe_segment import PipeSegment 
+from pythermonet.components.pipe_infrastructure import PipeInfrastructure
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -199,7 +202,7 @@ def test_image_source_effect():
     assert np.all(g_hfls < g_ils), (
         "Image source effect: g_hfls should be < g_ILS at late times"
     )
-    print(f"  [PASS] Image source effect: g_HFLS < g_ILS at late times ✓")
+    print(f"  [PASS] Image source effect: g_HFLS < g_ILS at late times OK")
     return time, g_ils, g_hfls
 
 
@@ -223,7 +226,7 @@ def test_finite_length_effect():
     assert np.all(g_long >= g_short - 1e-10), (
         "Finite length: long pipe g should be >= short pipe g"
     )
-    print(f"  [PASS] Finite length: g_long >= g_short at all times ✓")
+    print(f"  [PASS] Finite length: g_long >= g_short at all times OK")
     return time, g_short, g_long
 
 
@@ -243,7 +246,7 @@ def test_monotonicity():
     for label, field in configs.items():
         g = hhe.gfunction(field, k_s=K_S, alpha=ALPHA, time=time)
         _assert_monotone(g, label)
-        print(f"  [PASS] Monotonicity: {label} ✓")
+        print(f"  [PASS] Monotonicity: {label} OK")
     return time, configs
 
 
@@ -264,7 +267,7 @@ def test_multi_pipe_interaction():
         assert np.all(gn >= g1 - 1e-10), (
             f"Multi-pipe: g({n} pipes) should be >= g(1 pipe)"
         )
-        print(f"  [PASS] Multi-pipe: g({n}) >= g(1) at all times ✓")
+        print(f"  [PASS] Multi-pipe: g({n}) >= g(1) at all times OK")
 
     return time, g1
 
@@ -327,7 +330,7 @@ def test_spatial_cutoff():
     g2_l  = hhe.gfunction(make_field(2, spacing=1.0), k_s=K_S, alpha=ALPHA, time=t_long)
     assert g2_l[0] > g1_l[0], "Nearby pipe should increase g at longer times"
 
-    print(f"  [PASS] Spatial cutoff: distant pipe negligible at early times ✓")
+    print(f"  [PASS] Spatial cutoff: distant pipe negligible at early times OK")
     return time_early, g1, g2_close, g2_far
 
 
@@ -336,8 +339,13 @@ def test_spatial_cutoff():
 # ---------------------------------------------------------------------------
 
 def make_plots(outdir: str):
-    import matplotlib.pyplot as plt
-    import matplotlib.gridspec as gridspec
+    try:
+        import matplotlib.pyplot as plt
+        import matplotlib.gridspec as gridspec
+    except ImportError as e:
+        raise ImportError(
+            'matplotlib is required to generate plots. Install it with `pip install matplotlib`.'
+        ) from e
 
     os.makedirs(outdir, exist_ok=True)
     t_s = DEPTH**2 / (9.0 * ALPHA)   # Eskilson time scale
@@ -654,8 +662,13 @@ if __name__ == '__main__':
     print(f"Results: {passed} passed, {failed} failed")
     print("=" * 60)
 
-    if args.plots or True:   # always plot when running standalone
+    if args.plots:
         print("\nGenerating plots...")
-        make_plots(args.plotdir)
+        try:
+            make_plots(args.plotdir)
+        except ImportError as e:
+            print(f"  [SKIP] Plot generation skipped: {e}")
+    else:
+        print("\nSkipping plots (use --plots to enable plotting).")
 
     sys.exit(0 if failed == 0 else 1)
