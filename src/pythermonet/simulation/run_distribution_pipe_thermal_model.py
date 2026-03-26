@@ -6,7 +6,7 @@ import numpy as np
 from pythermonet.core.heat_carrier import HeatCarrier
 from pythermonet.core.soil import Soil
 from pythermonet.dimensioning.hydraulic_result import HydraulicResult
-from pythermonet.dimensioning.borehole_length import apply_annual_balance
+from pythermonet.dimensioning.BHE.borehole_length import apply_annual_balance
 from pythermonet.simulation.distribution_pipe_thermal_model import (
     PipeGroup,
     ModeInput,

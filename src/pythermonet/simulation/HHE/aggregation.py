@@ -88,6 +88,7 @@ def build_interaction_map(
     alpha: float,
     dis_tol: float = 0.01,
     n_sigma: float = 3.0,
+    n_recv: int | None = None,
 ) -> Dict[PairGeometry, List[Tuple[SegmentID, SegmentID]]]:
     """
     Build a map from unique pair geometries to lists of (src, recv) segment ID
@@ -109,6 +110,10 @@ def build_interaction_map(
         Distance tolerance for grouping (m). Default 0.01.
     n_sigma : float
         Propagation distance multiplier. Default 3.
+    n_recv : int, optional
+        Number of receiver pipes to include (pipes 0 .. n_recv-1).
+        Sources always span the full 0 .. n_parallel-1 range.
+        Defaults to n_parallel (all receivers).
 
     Returns
     -------
@@ -116,13 +121,15 @@ def build_interaction_map(
     """
     r_max = thermal_propagation_distance(t, alpha, n_sigma)
     n_seg = len(trace_segments)
+    if n_recv is None:
+        n_recv = n_parallel
 
     # Pre-compute x start positions for all segments
     x_starts = [_segment_x_start(s, trace_segments) for s in range(n_seg)]
 
     interaction_map: Dict[PairGeometry, List[Tuple[SegmentID, SegmentID]]] = {}
 
-    for p_recv in range(n_parallel):
+    for p_recv in range(n_recv):
         y_recv = p_recv * pipe_distance
         for s_recv in range(n_seg):
             x_recv = x_starts[s_recv]

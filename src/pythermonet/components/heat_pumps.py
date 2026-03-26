@@ -70,7 +70,6 @@ class HeatPumps:
             raise ValueError("peak_heating_h must be > 0")
         if self.peak_cooling_h is not None and self.peak_cooling_h <= 0:
             raise ValueError("peak_cooling_h must be > 0 when provided")
-
         if not (0.0 <= self.peak_fraction_heating <= 1.0):
             raise ValueError("peak_fraction_heating must be in [0,1]")
         if not (0.0 <= self.peak_fraction_cooling <= 1.0):

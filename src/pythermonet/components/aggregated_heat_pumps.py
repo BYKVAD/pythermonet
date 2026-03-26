@@ -36,6 +36,9 @@ class AggregatedHeatPumps:
     f_peak_heating: float = 1.0   # fraction of peak heating load covered [0–1]
     f_peak_cooling: float = 1.0   # fraction of peak cooling load covered [0–1]
 
+    peak_heating_h: float = 4.0         # peak load pulse duration — heating [h]
+    peak_cooling_h: float | None = 4.0  # peak load pulse duration — cooling [h]; None disables cooling pulse
+
     # ---------- computed ----------
     heating_ground_load_W: np.ndarray = field(init=False)   # [W] (3,): annual, winter, peak
     cooling_ground_load_W: Optional[np.ndarray] = field(init=False)  # (3,) or None
@@ -56,6 +59,10 @@ class AggregatedHeatPumps:
             raise ValueError(f"f_peak_heating must be in [0, 1]. Got {self.f_peak_heating}")
         if not (0.0 <= self.f_peak_cooling <= 1.0):
             raise ValueError(f"f_peak_cooling must be in [0, 1]. Got {self.f_peak_cooling}")
+        if self.peak_heating_h <= 0:
+            raise ValueError("peak_heating_h must be > 0")
+        if self.peak_cooling_h is not None and self.peak_cooling_h <= 0:
+            raise ValueError("peak_cooling_h must be > 0 when provided")
 
         # --- Heating ground loads ---
         if li.cop_yearly_heating <= 0 or li.cop_winter_heating <= 0 or li.cop_peak_heating <= 0:
@@ -113,3 +120,4 @@ class AggregatedHeatPumps:
             object.__setattr__(self, "cooling_ground_load_W", None)
             object.__setattr__(self, "deltaT_sys_cool", None)
             object.__setattr__(self, "aggregated_mdot_peak_cool_kg_s", None)
+

@@ -8,7 +8,7 @@ import numpy as np
 from pythermonet.components.vhe_field import VHEField
 from pythermonet.core.soil import Soil
 from pythermonet.dimensioning.hydraulic_result import HydraulicResult
-from pythermonet.dimensioning.borehole_length import BoreholeSizingResult, apply_annual_balance
+from pythermonet.dimensioning.BHE.borehole_length import BoreholeSizingResult, apply_annual_balance
 from pythermonet.simulation.distribution_pipe_thermal_model import ModeResult as DistModeResult
 
 
