@@ -18,7 +18,7 @@ from pythermonet.dimensioning.sizing_parameters import SizingParameters
 # Paths
 # -----------------------------------------------------------------------------
 PROJECT_DIR = Path(__file__).resolve().parent
-agg_load_file = PROJECT_DIR / "data/silkeborg_aggregated_load_heat_cool.dat"
+agg_load_file = PROJECT_DIR / "data/silkeborg_aggregated_load_heat.dat"
 topology_file = PROJECT_DIR / "data/silkeborg_topology_dimensioned_heat.dat"
 
 # -----------------------------------------------------------------------------

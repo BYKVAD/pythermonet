@@ -51,7 +51,7 @@ brine = HeatCarrier(
 )
 
 soil = Soil(
-    rho=2650,
+    rho=2500,
     c=1000,
     thermalCond=2.36,
     thermalCondShallowHeating=1.25,

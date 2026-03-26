@@ -71,9 +71,18 @@ def compute_distribution_pipe_thermal_capacity(
         To_C=float(T_brine_min_heat - heat_pumps.deltaT_sys_heat),
     )
 
-    pipe_groups = _build_pipe_groups_from_hydraulic(hydraulic, Re_arr=hydraulic.Re_heating)
+    pipe_groups_heat = _build_pipe_groups_from_hydraulic(hydraulic, Re_arr=hydraulic.Re_heating)
 
-    cooling = None
+    model_heat = DistributionPipeModel(
+        brine=brine,
+        soil=soil,
+        T0_C=float(soil.surfaceTemp),
+        surface_amp_C=float(soil.surfaceTempAmp),
+        pipe_groups=pipe_groups_heat,
+        heating=heating,
+        cooling=None,
+    )
+    results = compute_distribution_pipe_thermal_response(model_heat)
 
     if P_cool is not None:
         if times_cool_s is None:
@@ -88,17 +97,27 @@ def compute_distribution_pipe_thermal_capacity(
             To_C=float(T_brine_max_cool + heat_pumps.deltaT_sys_cool),
         )
 
-    model = DistributionPipeModel(
-        brine=brine,
-        soil=soil,
-        T0_C=float(soil.surfaceTemp),
-        surface_amp_C=float(soil.surfaceTempAmp),
-        pipe_groups=pipe_groups,
-        heating=heating,
-        cooling=cooling,
-    )
+        # Use the cooling Reynolds number so the pipe thermal resistance is
+        # computed at the actual cooling flow rate (which differs from heating).
+        Re_cool_arr = (
+            hydraulic.Re_cooling
+            if hydraulic.Re_cooling is not None
+            else hydraulic.Re_heating
+        )
+        pipe_groups_cool = _build_pipe_groups_from_hydraulic(hydraulic, Re_arr=Re_cool_arr)
 
-    return compute_distribution_pipe_thermal_response(model)
+        model_cool = DistributionPipeModel(
+            brine=brine,
+            soil=soil,
+            T0_C=float(soil.surfaceTemp),
+            surface_amp_C=float(soil.surfaceTempAmp),
+            pipe_groups=pipe_groups_cool,
+            heating=heating,  # required field; only the cooling result is used
+            cooling=cooling,
+        )
+        results["cooling"] = compute_distribution_pipe_thermal_response(model_cool)["cooling"]
+
+    return results
 
 def print_pipe_thermal_table(network, decimals: int = 2):
     """

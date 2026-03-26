@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Users/soeb/AppData/Local/Temp/pythermonet_v1/examples/silkeborg_bhe_full_dimensioning_heat_cool/**)"
+      "Read(//c/Users/soeb/AppData/Local/Temp/pythermonet_v1/examples/silkeborg_bhe_full_dimensioning_heat_cool/**)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Read(//c/Users/soeb/.claude/projects/c--Users-soeb-Documents-GitHub-pythermonetII/6955198c-110c-4de2-b7f0-5cdd200a2303/tool-results/**)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/soeb1978/pythermonet/main/src/pythermonet/core/dimensioning_functions.py\")",
+      "WebFetch(domain:github.com)",
+      "Read(//tmp/**)"
     ]
   }
 }
