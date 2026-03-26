@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+sys.stdout.reconfigure(encoding="utf-8")
 
 from pythermonet.components.heat_pumps import HeatPumps
 from pythermonet.core.material import Material
@@ -15,7 +18,8 @@ from pythermonet.components.vhe_field import VHEField
 from pythermonet.core.annulus import Annulus
 from pythermonet.core.pipe_segment import PipeSegment
 
-from pythermonet.dimensioning.bhe_workflow import run_bhe_sizing_workflow, print_bhe_results
+from pythermonet.dimensioning.BHE.bhe_workflow import run_bhe_sizing_workflow, print_bhe_results
+from pythermonet.dimensioning.sizing_parameters import SizingParameters
 
 # -----------------------------------------------------------------------------
 # Paths
@@ -24,7 +28,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PROJECT_DIR.parents[2]
 
 pipe_catalogue_file = REPO_ROOT / "PythermonetII/src/pythermonet/resources/pipe_catalogue.csv"
-heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat.dat"
+heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat_high_cool.dat"
 topology_file = PROJECT_DIR / "data/silkeborg_topology.dat"
 
 
@@ -101,7 +105,6 @@ BHEfield = VHEField(
     shankSpacing=0.015 + 2 * 0.02,
     H_m=120.0,
     D_m=1.0,
-    r_b_m=0.075,
     tilt_rad=0.0,
     orientation_rad=0.0,
 )
@@ -122,23 +125,16 @@ heat_pumps = HeatPumps(
     peak_fraction_cooling=1.0,
 )
 
+sizing = SizingParameters(time_horizon_years=30.0)
+
 # -----------------------------------------------------------------------------
 # 5) Brine temperature limits
 # -----------------------------------------------------------------------------
 T_BRINE_MIN_HEAT = -3.0   # HP evaporator inlet limit [°C]
-T_BRINE_MAX_COOL = 25.0   # HP condenser inlet limit [°C]
+T_BRINE_MAX_COOL = 20.0   # HP condenser inlet limit [°C]
 
 # -----------------------------------------------------------------------------
-# 6) Simulation time vector
-# -----------------------------------------------------------------------------
-times_s = [
-    4 * 3600,
-    4 * 3600 + 86400 * 365.25 / 4,
-    4 * 3600 + 86400 * 365.25 / 4 + 30 * 365.25 * 86400,
-]
-
-# -----------------------------------------------------------------------------
-# 7) Hydraulic pipe network sizing (mode-specific)
+# 6) Hydraulic pipe network sizing (mode-specific)
 # -----------------------------------------------------------------------------
 hydraulic = run_pipedimensioning(
     pipe_catalogue,
@@ -156,7 +152,7 @@ result = run_bhe_sizing_workflow(
     hydraulic=hydraulic,
     brine=brine,
     soil=soil,
-    times_s=times_s,
+    sizing=sizing,
     T_brine_min_heat=T_BRINE_MIN_HEAT,
     T_brine_max_cool=T_BRINE_MAX_COOL,
 )

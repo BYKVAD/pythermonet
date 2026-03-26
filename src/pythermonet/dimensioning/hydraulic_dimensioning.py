@@ -81,7 +81,7 @@ def run_pipedimensioning(
             for hpid in ids:
                 hp = hp_by_id[int(hpid)]
                 Qv_hp = (
-                    -hp.peakCooling_ground_load
+                    hp.peakCooling_ground_load
                     / hp.deltaTCooling
                     / brine.rho
                     / brine.c

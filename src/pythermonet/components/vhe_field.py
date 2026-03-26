@@ -22,7 +22,6 @@ class VHEField:
 
     H_m: float
     D_m: float
-    r_b_m: float
     use_z_as_depth: bool = False
     tilt_rad: float = 0.0
     orientation_rad: float = 0.0
@@ -50,8 +49,6 @@ class VHEField:
             raise ValueError("H_m must be > 0.")
         if self.D_m < 0.0:
             raise ValueError("D_m must be >= 0.")
-        if self.r_b_m <= 0.0:
-            raise ValueError("r_b_m must be > 0.")
 
         object.__setattr__(
             self,
@@ -61,7 +58,6 @@ class VHEField:
         object.__setattr__(self, "shankSpacing", float(self.shankSpacing))
         object.__setattr__(self, "H_m", float(self.H_m))
         object.__setattr__(self, "D_m", float(self.D_m))
-        object.__setattr__(self, "r_b_m", float(self.r_b_m))
         object.__setattr__(self, "use_z_as_depth", bool(self.use_z_as_depth))
         object.__setattr__(self, "tilt_rad", float(self.tilt_rad))
         object.__setattr__(self, "orientation_rad", float(self.orientation_rad))
@@ -91,6 +87,11 @@ class VHEField:
     @property
     def xy_m(self) -> tuple[tuple[float, float], ...]:
         return tuple((row[0], row[1]) for row in self.coordinates)
+
+    @property
+    def r_b_m(self) -> float:
+        """Borehole radius [m], derived from borehole.outerDiameter."""
+        return float(self.borehole.outerDiameter) / 2.0
 
     def to_pygfunction_boreholes(self) -> list[gt.boreholes.Borehole]:
         xy = np.asarray(self.xy_m, dtype=float)
@@ -134,7 +135,7 @@ class VHEField:
         self,
         times_s,
         alpha_m2_s: float,
-        method: str = "detailed",
+        method: str = "equivalent",
         boundary_condition: str = "UHTR",
         options: dict | None = None,
     ) -> np.ndarray:

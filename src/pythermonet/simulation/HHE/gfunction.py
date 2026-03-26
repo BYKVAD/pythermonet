@@ -10,20 +10,27 @@ q' (W/m). The g-function is therefore scalar:
 
     g(t) = 2*pi*k_s * DeltaT_avg / q'
 
-where DeltaT_avg is the average pipe wall temperature rise across all pipes
-and all trace segments:
+where DeltaT_avg is the average pipe wall temperature rise across all pipes.
 
-    DeltaT_avg = (1 / (N_pipes * N_seg)) * sum_{recv} sum_{src} h_{src,recv}(t)
-                 * q' / (2*pi*k_s)
+Each pipe-pair interaction is expressed as:
 
-So:
-    g(t) = (1 / (N_pipes * N_seg)) * sum_{recv} sum_{src} h_{src,recv}(t)
+    DeltaT_pair = q' / (2*pi*k_s) * h
+
+so:
+
+    g(t) = (1 / N_total) * sum_{recv} sum_{src} h_{src,recv}(t)
+
+Single-integral FLS
+-------------------
+For single-segment traces (all pipes same length L, starting at x = 0),
+each h_{src,recv} is evaluated with the single-integral HFLS formula in
+heat_transfer.py, keyed only by the lateral separation dy between the pipes.
 
 Spatial aggregation
 -------------------
-Pairs of segments with the same (dy, dx) geometry produce the same h value
-and are computed only once. Pairs outside the thermal propagation distance
-are skipped entirely (their erfc contribution is < 0.002%).
+Pairs of pipes with the same |dy| produce the same h value and are computed
+only once. Pairs outside the thermal propagation distance are skipped
+(their erfc contribution is negligible).
 """
 
 from __future__ import annotations
@@ -31,8 +38,8 @@ from __future__ import annotations
 import numpy as np
 from typing import Optional
 
-from .aggregation import build_interaction_map, _segment_x_start
-from .heat_transfer import hfls_segment_interaction
+from .aggregation import build_interaction_map
+from .heat_transfer import hfls_pipe_interaction
 
 
 class HHEGFunction:
@@ -43,20 +50,15 @@ class HHEGFunction:
     Parameters
     ----------
     pipe_infrastructure : PipeInfrastructure
-        The horizontal ground loop definition. pipeDistance must be set
-        (not None) for multi-pipe fields.
+        The horizontal ground loop definition.
     k_s : float
         Soil thermal conductivity (W/m/K).
     alpha : float
-        Soil thermal diffusivity (m2/s).
+        Soil thermal diffusivity (m²/s).
     time : array-like, optional
         Time values (s). If provided, g-function is evaluated immediately.
-    dis_tol : float
-        Lateral/longitudinal distance tolerance for pair grouping (m).
     n_sigma : float
         Thermal propagation distance multiplier for pair cutoff.
-    n_gauss : int
-        Gauss-Legendre quadrature points per integral.
     disp : bool
         Print progress messages.
     """
@@ -67,17 +69,13 @@ class HHEGFunction:
         k_s: float,
         alpha: float,
         time: Optional[np.ndarray] = None,
-        dis_tol: float = 0.01,
         n_sigma: float = 3.0,
-        n_gauss: int = 21,
         disp: bool = False,
     ):
         self.pi = pipe_infrastructure
         self.k_s = k_s
         self.alpha = alpha
-        self.dis_tol = dis_tol
         self.n_sigma = n_sigma
-        self.n_gauss = n_gauss
         self.disp = disp
         self.gFunc: Optional[np.ndarray] = None
         self._time: Optional[np.ndarray] = None
@@ -85,15 +83,10 @@ class HHEGFunction:
         self._n_pipes = pipe_infrastructure.NParallelPipes
         self._n_seg = len(pipe_infrastructure.traceSegments)
         self._n_total = self._n_pipes * self._n_seg
-        self._depth = pipe_infrastructure.burialDepth
-        self._pipe_dist = pipe_infrastructure.pipeDistance or 0.0
+        self._depth = float(pipe_infrastructure.burialDepth)
+        self._pipe_dist = float(pipe_infrastructure.pipeDistance or 0.0)
         self._trace = pipe_infrastructure.traceSegments
-        self._r_pipe = (self._trace[0].outerDiameter / 2.0) if self._trace[0].outerDiameter is not None else 0.0
-
-        # Pre-compute x start positions along the trace
-        self._x_starts = [
-            _segment_x_start(s, self._trace) for s in range(self._n_seg)
-        ]
+        self._r_pipe = float(self._trace[0].outerDiameter / 2.0) if self._trace[0].outerDiameter is not None else 0.0
 
         if time is not None:
             self.evaluate(np.asarray(time, dtype=float))
@@ -112,56 +105,59 @@ class HHEGFunction:
         for k, t in enumerate(time):
             if self.disp:
                 print(f"  [{k+1}/{len(time)}]  t = {t:.3e} s", flush=True)
-
             g[k] = self._eval_single(t)
 
         self.gFunc = g
         return g
 
     def _eval_single(self, t: float) -> float:
-        """Evaluate g at a single time step."""
+        """
+        Evaluate g at a single time step using field symmetry.
 
-        # Build map of unique geometries -> list of (src, recv) pairs
+        The field is symmetric about its midpoint: pipe i and pipe N-1-i
+        have identical temperatures.  Only the first n_half receivers are
+        computed; their contributions are doubled, except for the centre
+        pipe (when N is odd) which is unique and counted once.
+        """
+        n_pipes = self._n_pipes
+        n_half = (n_pipes + 1) // 2  # number of unique receiver pipes
+
         interaction_map = build_interaction_map(
-            n_parallel=self._n_pipes,
+            n_parallel=n_pipes,
             pipe_distance=self._pipe_dist,
             trace_segments=self._trace,
             t=t,
             alpha=self.alpha,
-            dis_tol=self.dis_tol,
             n_sigma=self.n_sigma,
+            n_recv=n_half,
         )
 
-        # h_sum accumulates sum of h values for each receiver segment
-        # indexed as h_sum[p_recv, s_recv]
-        h_sum = np.zeros((self._n_pipes, self._n_seg))
+        h_sum = np.zeros((n_half, self._n_seg))
 
         for geom, pairs in interaction_map.items():
-            # Compute h for this unique geometry (using first pair as representative)
-            src_id, recv_id = pairs[0]
-            p_src, s_src = src_id
-            p_recv, s_recv = recv_id
+            L = float(self._trace[geom.s_src].length)
+            dy = abs(geom.dy)
 
-            h_val = hfls_segment_interaction(
+            h_val = hfls_pipe_interaction(
                 t=t,
-                x_src=self._x_starts[s_src],
-                L_src=self._trace[s_src].length,
-                y_src=p_src * self._pipe_dist,
-                x_recv=self._x_starts[s_recv],
-                L_recv=self._trace[s_recv].length,
-                y_recv=p_recv * self._pipe_dist,
+                L=L,
+                dy=dy,
                 depth=self._depth,
                 r_pipe=self._r_pipe,
                 alpha=self.alpha,
-                n_gauss=self.n_gauss,
             )
 
-            # Distribute to all pairs that share this geometry
-            for src_id, recv_id in pairs:
+            for _, recv_id in pairs:
                 h_sum[recv_id.p, recv_id.s] += h_val
 
-        # g = (1 / N_total) * sum of all h values
-        return float(np.sum(h_sum)) / self._n_total
+        # Each of the first n_half pipes represents itself and its mirror
+        # on the other side of the field — weight 2 for all, except the
+        # centre pipe (last entry when N is odd) which is unique — weight 1.
+        weights = np.full(n_half, 2.0)
+        if n_pipes % 2 == 1:
+            weights[-1] = 1.0
+
+        return float(np.dot(weights, h_sum.sum(axis=1))) / self._n_total
 
     def visualize_g_function(self, ax=None):
         """Plot the g-function. Returns matplotlib figure."""
@@ -174,7 +170,6 @@ class HHEGFunction:
         if fig is None:
             fig = axis.get_figure()
 
-        # Normalise time axis to t_s = D^2 / (9*alpha) (Eskilson time scale)
         t_s = self._depth**2 / (9.0 * self.alpha)
         ln_t = np.log(self._time / t_s)
 
@@ -195,9 +190,7 @@ def gfunction(
     k_s: float,
     alpha: float,
     time: np.ndarray,
-    dis_tol: float = 0.01,
     n_sigma: float = 3.0,
-    n_gauss: int = 21,
     disp: bool = False,
 ) -> np.ndarray:
     """
@@ -210,15 +203,11 @@ def gfunction(
     k_s : float
         Soil thermal conductivity (W/m/K).
     alpha : float
-        Soil thermal diffusivity (m2/s).
+        Soil thermal diffusivity (m²/s).
     time : np.ndarray
         Evaluation times (s).
-    dis_tol : float
-        Pair grouping tolerance (m).
     n_sigma : float
         Thermal propagation cutoff multiplier.
-    n_gauss : int
-        Gauss-Legendre quadrature points.
     disp : bool
         Print progress.
 
@@ -230,8 +219,6 @@ def gfunction(
     return HHEGFunction(
         pipe_infrastructure, k_s, alpha,
         time=time,
-        dis_tol=dis_tol,
         n_sigma=n_sigma,
-        n_gauss=n_gauss,
         disp=disp,
     ).gFunc

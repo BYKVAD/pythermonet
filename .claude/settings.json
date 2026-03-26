@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/soeb/AppData/Local/Temp/pythermonet_v1/examples/silkeborg_bhe_full_dimensioning_heat_cool/**)"
+    ]
+  }
+}
