@@ -8,35 +8,28 @@ Physical setup
 Two parallel horizontal pipes of equal length L are buried at the same depth D,
 with a lateral (centre-to-centre) separation dy. Both pipes start at x = 0.
 An isothermal ground surface (T = 0 at z = 0) is enforced by method of images:
-a mirror source at depth -D with opposite sign heat flux.
+each real pipe at depth D has a mirror source at depth -D (i.e. 2D above the
+real pipe).
 
-The average temperature rise along the receiver pipe due to the source pipe is:
+The temperature rise at the receiver pipe due to the source pipe is:
 
     ΔT = q' / (2π k_s) · h
 
-Derivation of the single-integral form
----------------------------------------
-The double integral over source (xs) and receiver (xr), both on [0, L], is:
+Single-integral form
+--------------------
+The temperature at the near end (x = 0) of the receiver pipe due to the full
+source pipe (xs in [0, L]) is evaluated as:
 
-    (1/L) · ∫₀ᴸ ∫₀ᴸ [erfc(r₁/√(4αt))/r₁ − erfc(r₂/√(4αt))/r₂] dxs dxr
+    h = ∫₀ᴸ [erfc(r₁(u)/√(4αt))/r₁(u) − erfc(r₂(u)/√(4αt))/r₂(u)] du
 
-Substituting u = xr − xs (range −L to L, triangular weight L − |u|):
+where u = xs (distance along the source from its start):
 
-    = (2/L) · ∫₀ᴸ (1 − u/L) · [erfc(r₁(u))/r₁(u) − erfc(r₂(u))/r₂(u)] du
+    r₁(u) = √(u² + d_perp²)          real source distance
+    r₂(u) = √(u² + d_image²)         mirror source distance
 
-Normalising to h = 2πk_s/q' · ΔT:
-
-    h = ∫₀ᴸ (1 − u/L) · [erfc(r₁(u))/r₁(u) − erfc(r₂(u))/r₂(u)] du
-
-where:
-    r₁(u) = √(u² + d_perp²)              real source distance
-    r₂(u) = √(u² + d_perp² + (2D)²)     mirror source distance
-
-    For cross-pipe (dy > 0):   d_perp = dy
-    For self        (dy = 0):  d_perp = r_pipe   (pipe outer radius)
-
-This reduction is exact when source and receiver share the same start position
-and length, which holds for all single-segment HHE traces.
+    For cross-pipe (dy > 0):   d_perp = dy,   d_image = √(dy² + (2D)²)
+    For self        (dy = 0):  d_perp = r_pipe (avoids singularity),
+                               d_image = 2D   (image is never singular)
 
 References
 ----------
@@ -60,29 +53,26 @@ def hfls_pipe_interaction(
     alpha: float,
 ) -> float:
     """
-    Contribution of one source pipe (plus its mirror image) to the
-    receiver pipe's average temperature, expressed as a dimensionless h:
+    Contribution of one source pipe plus its mirror image to the receiver pipe,
+    expressed as a dimensionless h:
 
-        ΔT_avg = q' / (2π k_s) · h
+        ΔT = q' / (2π k_s) · h
 
     The source pipe runs from x = 0 to x = L at lateral position y = dy
-    relative to the receiver pipe (dy = 0 for self-response).  The method
-    of images mirror source at depth −D is included via the r₂ term.
+    relative to the receiver.  The isothermal surface BC is enforced by
+    a mirror source at depth −D (i.e. distance 2D above the real pipe).
 
-    Derivation of the single-integral form
-    ----------------------------------------
-    The exact receiver average requires a double integral over source (xs)
-    and receiver (xr) positions, both on [0, L].  Substituting u = xr − xs
-    reduces this to a single integral with a triangular weight (1 − u/L),
-    which accounts for the receiver averaging implicitly:
+    Integral form:
+        h = ∫₀ᴸ [erfc(r₁(u)/√(4αt))/r₁(u) − erfc(r₂(u)/√(4αt))/r₂(u)] du
 
-        h = ∫₀ᴸ (1 − u/L) · [erfc(r₁/√(4αt))/r₁ − erfc(r₂/√(4αt))/r₂] du
+        r₁(u) = √(u² + d_perp²)           real source distance
+        r₂(u) = √(u² + d_image²)          mirror source distance
 
-        r₁(u) = √(u² + d_perp²)            real source
-        r₂(u) = √(u² + d_perp² + (2D)²)   mirror image (isothermal BC)
+        d_perp  = r_pipe  for self (dy = 0);  dy  for cross-pipe
+        d_image = 2D      for self;           √(dy² + (2D)²)  for cross-pipe
 
-        d_perp = dy       for a neighbour pipe  (dy > 0)
-        d_perp = r_pipe   for the self-response (dy = 0)
+    The image source is never singular (2D >> 0), so r_pipe is NOT added
+    to the image distance.
 
     Parameters
     ----------
@@ -107,13 +97,18 @@ def hfls_pipe_interaction(
     """
     sqrt_4at = np.sqrt(4.0 * alpha * t)
     is_self = (dy == 0.0)
+    # Real source: use r_pipe as minimum distance for self (avoids singularity)
     d_perp_sq = r_pipe**2 if is_self else dy**2
-    d_image_sq = d_perp_sq + (2.0 * depth) ** 2
+    # Image source: mirror is at depth -D, so perpendicular distance to receiver
+    # at depth +D is sqrt(dy^2 + (2D)^2). For self, dy=0 → distance is just 2D.
+    # The image is never singular, so r_pipe does NOT enter the image distance.
+    d_image_sq = (0.0 if is_self else dy**2) + (2.0 * depth) ** 2
 
     def integrand(u: float) -> float:
         r1 = np.sqrt(u * u + d_perp_sq)
         r2 = np.sqrt(u * u + d_image_sq)
-        return (1.0 - u / L) * (erfc(r1 / sqrt_4at) / r1 - erfc(r2 / sqrt_4at) / r2)
+        return erfc(r1 / sqrt_4at) / r1 - erfc(r2 / sqrt_4at) / r2
+
 
     result, _ = quad(
         integrand,

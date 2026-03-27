@@ -44,7 +44,7 @@ brine = HeatCarrier(
 soil = Soil(
     rho=2500,
     c=1000,
-    thermalCond=2.36,
+    thermalCond=1.25,
     thermalCondShallowHeating=1.25,
     thermalCondShallowCooling=1.25,
     Qgeo=0.0185,
@@ -67,7 +67,7 @@ _, hydraulic = read_dimensioned_topology_tsv_to_hydraulic(
 # -----------------------------------------------------------------------------
 # 3) HHE field  (20 parallel pipes = 10 loops, horizontal, 1.2 m burial depth)
 # -----------------------------------------------------------------------------
-hhe_pipe_material = Material(rho=950, c=2300, thermalCond=0.4)
+hhe_pipe_material = pipe_material_dist
 
 hhe_segment = PipeSegment(
     outerDiameter=0.040,    # 40 mm OD
@@ -88,6 +88,7 @@ pipe_infrastructure = PipeInfrastructure(
 hhe_field = HHEGroundField(
     pipe_infrastructure=pipe_infrastructure,
     k_s=float(soil.thermalCondShallowHeating),
+    k_s_cooling=float(soil.thermalCondShallowCooling),
 )
 
 # -----------------------------------------------------------------------------

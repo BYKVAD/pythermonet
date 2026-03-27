@@ -7,7 +7,15 @@
       "Read(//c/Users/soeb/.claude/projects/c--Users-soeb-Documents-GitHub-pythermonetII/6955198c-110c-4de2-b7f0-5cdd200a2303/tool-results/**)",
       "Bash(curl -s \"https://raw.githubusercontent.com/soeb1978/pythermonet/main/src/pythermonet/core/dimensioning_functions.py\")",
       "WebFetch(domain:github.com)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/soeb1978/pythermonet/main/src/pythermonet/core/fThermonetDim.py\")",
+      "Bash(python -c \":*)",
+      "WebSearch",
+      "WebFetch(domain:docs.nrel.gov)",
+      "WebFetch(domain:www.mdpi.com)",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:publications.polymtl.ca)",
+      "Read(//c/Users/soeb/**)"
     ]
   }
 }

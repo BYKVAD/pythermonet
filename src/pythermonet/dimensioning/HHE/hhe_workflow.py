@@ -176,11 +176,11 @@ def run_hhe_sizing_workflow(
     )
 
     L = sizing.L_m
-    alpha = float(soil.thermalCond) / (float(soil.rho) * float(soil.c))
+    alpha_heat = hhe_field.k_s_eff_heating(soil) / (float(soil.rho) * float(soil.c))
     m_dot_heat = heat_pumps.aggregated_mdot_peak_heat_kg_s / n_loops
 
     # HHE temperatures at each pulse (heating)
-    g_heat = hhe_field.compute_gfunction(L, np.asarray(times_heat_s, dtype=float), alpha)
+    g_heat = hhe_field.compute_gfunction(L, np.asarray(times_heat_s, dtype=float), alpha_heat)
     R_heat = hhe_field.R_at_L(L, m_dot_heat, brine, soil)
     T_h_ann, T_h_win, T_h_peak = _hhe_mean_temperatures(
         L, P_heating, g_heat, hhe_field, soil, R_heat, sign=-1.0
@@ -189,8 +189,9 @@ def run_hhe_sizing_workflow(
     # Cooling temperatures
     T_c_ann = T_c_win = T_c_peak = None
     if heat_pumps.has_cooling:
+        alpha_cool = hhe_field.k_s_eff_cooling(soil) / (float(soil.rho) * float(soil.c))
         m_dot_cool = heat_pumps.aggregated_mdot_peak_cool_kg_s / n_loops
-        g_cool = hhe_field.compute_gfunction(L, np.asarray(times_cool_s, dtype=float), alpha)
+        g_cool = hhe_field.compute_gfunction(L, np.asarray(times_cool_s, dtype=float), alpha_cool)
         R_cool = hhe_field.R_at_L(L, m_dot_cool, brine, soil)
         T_c_ann, T_c_win, T_c_peak = _hhe_mean_temperatures(
             L, P_cooling, g_cool, hhe_field, soil, R_cool, sign=+1.0

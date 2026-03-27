@@ -669,7 +669,7 @@ def size_ground_field_length(
 
     Works with any GroundField implementation (BHEGroundField or HHEGroundField).
     """
-    alpha = float(soil.thermalCond) / (float(soil.rho) * float(soil.c))
+    alpha = field.k_s_eff_heating(soil) / (float(soil.rho) * float(soil.c))
     times_s = np.asarray(times_s, dtype=float)
     P_W = np.asarray(P_W, dtype=float)
 
@@ -733,7 +733,11 @@ def size_ground_field_length_heating_cooling(
     """
     has_cooling = P_cooling_W is not None
 
-    alpha = float(soil.thermalCond) / (float(soil.rho) * float(soil.c))
+    # Use mode-specific effective conductivity for alpha so that shallow HHE fields
+    # use the correct shallow diffusivity rather than the deep-soil value.
+    alpha_heat = field.k_s_eff_heating(soil) / (float(soil.rho) * float(soil.c))
+    alpha_cool = field.k_s_eff_cooling(soil) / (float(soil.rho) * float(soil.c))
+
     times_heat_s = np.asarray(times_heat_s, dtype=float)
     P_heating_W = np.asarray(P_heating_W, dtype=float)
 
@@ -744,7 +748,7 @@ def size_ground_field_length_heating_cooling(
                 P_heating_W, np.asarray(P_cooling_W, dtype=float)
             )
 
-    # Step 1: heating
+    # Step 1: heating (size_ground_field_length already uses k_s_eff_heating internally)
     L_heat = size_ground_field_length(
         T_fluid_min=T_fluid_min,
         P_W=P_heating_W,
@@ -768,7 +772,7 @@ def size_ground_field_length_heating_cooling(
 
     # Step 2: check cooling at L_heat
     T_cool_at_L_heat = _T_fluid_cool_at_L(
-        L_heat, P_cooling_W, times_cool_s, field, brine, soil, m_dot_per_element_cool, alpha
+        L_heat, P_cooling_W, times_cool_s, field, brine, soil, m_dot_per_element_cool, alpha_cool
     )
     if T_cool_at_L_heat <= T_fluid_max:
         return FieldSizingResult(
@@ -779,7 +783,7 @@ def size_ground_field_length_heating_cooling(
         )
 
     # Step 3: cooling governs — bisect
-    g_ils_cool = field.ils_gfunction(times_cool_s, alpha)
+    g_ils_cool = field.ils_gfunction(times_cool_s, alpha_cool)
     R_sim_cool = field.R_simple(m_dot_per_element_cool, brine, soil)
     L_guess_cool = _initial_guess_cooling_field(
         P_cooling_W, g_ils_cool, field, soil, R_sim_cool, T_fluid_max
@@ -793,7 +797,7 @@ def size_ground_field_length_heating_cooling(
 
     def f_cool(L: float) -> float:
         return (
-            _T_fluid_cool_at_L(L, P_cooling_W, times_cool_s, field, brine, soil, m_dot_per_element_cool, alpha)
+            _T_fluid_cool_at_L(L, P_cooling_W, times_cool_s, field, brine, soil, m_dot_per_element_cool, alpha_cool)
             - T_fluid_max
         )
 

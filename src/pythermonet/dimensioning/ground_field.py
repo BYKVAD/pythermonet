@@ -115,6 +115,26 @@ class GroundField(ABC):
         ΔT = q · g / (2π · k_s) is dimensionally consistent.
         """
 
+    def k_s_eff_heating(self, soil: Soil) -> float:
+        """
+        Effective soil thermal conductivity for heating-mode sizing [W/m/K].
+
+        BHE: equals k_s_eff (deep, isotropic).
+        HHE: shallow heating conductivity (soil.thermalCondShallowHeating).
+        Default implementation delegates to k_s_eff; override for mode-specific values.
+        """
+        return self.k_s_eff(soil)
+
+    def k_s_eff_cooling(self, soil: Soil) -> float:
+        """
+        Effective soil thermal conductivity for cooling-mode sizing [W/m/K].
+
+        BHE: equals k_s_eff (deep, isotropic).
+        HHE: shallow cooling conductivity (soil.thermalCondShallowCooling).
+        Default implementation delegates to k_s_eff; override for mode-specific values.
+        """
+        return self.k_s_eff(soil)
+
 
 
 # ---------------------------------------------------------------------------
@@ -197,10 +217,21 @@ class HHEGroundField(GroundField):
         Template infrastructure — segment length is overridden at each
         bisection evaluation; all other properties are preserved.
     k_s : float
-        Soil thermal conductivity [W/m/K] (required for HHE g-function).
+        Shallow soil thermal conductivity for heating mode [W/m/K]
+        (soil.thermalCondShallowHeating). Used for the g-function and
+        the seasonal amplitude in heating mode.
+    k_s_cooling : float, optional
+        Shallow soil thermal conductivity for cooling mode [W/m/K]
+        (soil.thermalCondShallowCooling). Defaults to ``k_s`` when not
+        provided (i.e. same conductivity for both modes).
     """
 
-    def __init__(self, pipe_infrastructure: PipeInfrastructure, k_s: float) -> None:
+    def __init__(
+        self,
+        pipe_infrastructure: PipeInfrastructure,
+        k_s: float,
+        k_s_cooling: float | None = None,
+    ) -> None:
         if len(pipe_infrastructure.traceSegments) != 1:
             raise ValueError(
                 "HHEGroundField currently only supports single-segment traces "
@@ -209,6 +240,7 @@ class HHEGroundField(GroundField):
             )
         self._pi = pipe_infrastructure
         self._k_s = float(k_s)
+        self._k_s_cooling = float(k_s_cooling) if k_s_cooling is not None else float(k_s)
         self._seg = pipe_infrastructure.traceSegments[0]
 
     @property
@@ -278,6 +310,12 @@ class HHEGroundField(GroundField):
 
     def k_s_eff(self, soil: Soil) -> float:
         return self._k_s
+
+    def k_s_eff_heating(self, soil: Soil) -> float:
+        return self._k_s
+
+    def k_s_eff_cooling(self, soil: Soil) -> float:
+        return self._k_s_cooling
 
     def ils_gfunction(self, times_s: np.ndarray, alpha: float) -> np.ndarray:
         """ILS g averaged over N parallel horizontal pipes at lateral spacing d."""
