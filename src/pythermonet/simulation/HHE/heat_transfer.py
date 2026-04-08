@@ -101,7 +101,6 @@ def hfls_pipe_interaction(
     d_perp_sq = r_pipe**2 if is_self else dy**2
     # Image source: mirror is at depth -D, so perpendicular distance to receiver
     # at depth +D is sqrt(dy^2 + (2D)^2). For self, dy=0 → distance is just 2D.
-    # The image is never singular, so r_pipe does NOT enter the image distance.
     d_image_sq = (0.0 if is_self else dy**2) + (2.0 * depth) ** 2
 
     def integrand(u: float) -> float:
@@ -109,15 +108,21 @@ def hfls_pipe_interaction(
         r2 = np.sqrt(u * u + d_image_sq)
         return erfc(r1 / sqrt_4at) / r1 - erfc(r2 / sqrt_4at) / r2
 
+    # The integrand peaks near u = 0 and decays on the scale of sqrt_4at.
+    # Add interior breakpoints so that quad resolves the peak even when it is
+    # narrow relative to the total pipe length (early times).
+    inner_points = sorted({
+        p for p in (sqrt_4at, 3.0 * sqrt_4at) if 0.0 < p < L
+    })
 
     result, _ = quad(
         integrand,
         0.0,
         L,
-        limit=100,
+        limit=200,
         epsabs=1e-10,
         epsrel=1e-8,
-        points=[0.0] if is_self else [],
+        points=inner_points,
     )
     return result
 
