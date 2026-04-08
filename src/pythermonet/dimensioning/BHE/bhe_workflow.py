@@ -5,11 +5,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from pythermonet.components.ground_loads import GroundLoads
 from pythermonet.components.vhe_field import VHEField
 from pythermonet.core.heat_carrier import HeatCarrier
 from pythermonet.core.soil import Soil
 from pythermonet.dimensioning.BHE.borehole_length import (
-    BoreholeSizingResult,
+    FieldSizingResult,
     apply_annual_balance,
     size_borehole_length_heating_cooling,
 )
@@ -28,7 +29,7 @@ from pythermonet.simulation.run_distribution_pipe_thermal_model import (
 
 @dataclass(frozen=True)
 class BHEWorkflowResult:
-    sizing: BoreholeSizingResult
+    sizing: FieldSizingResult
     sys_temps: SystemBrineTemperatureResult
     P_bhe_heating_W: np.ndarray
     P_bhe_cooling_W: np.ndarray | None
@@ -44,7 +45,7 @@ class BHEWorkflowResult:
 
 def run_bhe_sizing_workflow(
     *,
-    heat_pumps,
+    ground_loads: GroundLoads,
     vhe_field: VHEField,
     hydraulic: HydraulicResult,
     brine: HeatCarrier,
@@ -56,26 +57,23 @@ def run_bhe_sizing_workflow(
     """
     Run the complete BHE sizing workflow from ground loads to system temperatures.
 
-    Covers steps that are identical regardless of simulation mode (full
-    dimensioning or aggregated load): annual balance, distribution pipe
-    thermal model, BHE load subtraction, borehole length sizing, and
-    system brine temperature computation.
-
-    Works with both ``HeatPumps`` and ``AggregatedHeatPumps``.
+    Covers: annual balance, distribution pipe thermal model, BHE load
+    subtraction, borehole length sizing, and system brine temperature
+    computation.
     """
     # Annual balance
-    P_heat_full = np.asarray(heat_pumps.heating_ground_load_W, dtype=float)
+    P_heat_full = np.asarray(ground_loads.heating_ground_load_W, dtype=float)
     P_cool_full = (
-        np.asarray(heat_pumps.cooling_ground_load_W, dtype=float)
-        if heat_pumps.has_cooling else None
+        np.asarray(ground_loads.cooling_ground_load_W, dtype=float)
+        if ground_loads.has_cooling else None
     )
     if P_cool_full is not None:
         P_heat_full, P_cool_full = apply_annual_balance(P_heat_full.copy(), P_cool_full.copy())
 
-    times_heat_s = sizing.times_s_peak_heating(heat_pumps.peak_heating_h)
+    times_heat_s = sizing.times_s_peak_heating(ground_loads.peak_heating_h)
     times_cool_s = (
-        sizing.times_s_peak_cooling(heat_pumps.peak_cooling_h)
-        if heat_pumps.has_cooling else None
+        sizing.times_s_peak_cooling(ground_loads.peak_cooling_h)
+        if ground_loads.has_cooling else None
     )
 
     # Distribution pipe thermal model
@@ -83,76 +81,83 @@ def run_bhe_sizing_workflow(
         hydraulic=hydraulic,
         brine=brine,
         soil=soil,
-        heat_pumps=heat_pumps,
+        ground_loads=ground_loads,
         times_heat_s=np.flip(times_heat_s),
         times_cool_s=np.flip(times_cool_s) if times_cool_s is not None else None,
         T_brine_min_heat=T_brine_min_heat,
-        T_brine_max_cool=T_brine_max_cool if heat_pumps.has_cooling else None,
+        T_brine_max_cool=T_brine_max_cool if ground_loads.has_cooling else None,
     )
 
     # BHE loads = full balanced loads × (1 − distribution fraction)
     P_heating = (1 - dist_thermal["heating"].F_total) * P_heat_full
     P_cooling = (
         (1 - dist_thermal["cooling"].F_total) * P_cool_full
-        if heat_pumps.has_cooling else None
+        if ground_loads.has_cooling else None
     )
 
     n_boreholes = vhe_field.n_boreholes
 
     # Size borehole length
-    sizing = size_borehole_length_heating_cooling(
-        T_fluid_min=T_brine_min_heat - 0.5 * heat_pumps.deltaT_sys_heat,
+    field_sizing = size_borehole_length_heating_cooling(
+        T_fluid_min=T_brine_min_heat - 0.5 * ground_loads.deltaT_sys_heat,
         P_heating_W=P_heating,
         times_heat_s=times_heat_s,
-        T_fluid_max=T_brine_max_cool + (0.5 * heat_pumps.deltaT_sys_cool if heat_pumps.has_cooling else 0.0),
+        T_fluid_max=T_brine_max_cool + (
+            0.5 * ground_loads.deltaT_sys_cool if ground_loads.has_cooling else 0.0
+        ),
         P_cooling_W=P_cooling,
         times_cool_s=times_cool_s,
         vhe_field=vhe_field,
         brine=brine,
         soil=soil,
-        m_dot_per_borehole_heat_kg_s=heat_pumps.aggregated_mdot_peak_heat_kg_s / n_boreholes,
+        m_dot_per_borehole_heat_kg_s=ground_loads.aggregated_mdot_peak_heat_kg_s / n_boreholes,
         m_dot_per_borehole_cool_kg_s=(
-            heat_pumps.aggregated_mdot_peak_cool_kg_s / n_boreholes
-            if heat_pumps.has_cooling else None
+            ground_loads.aggregated_mdot_peak_cool_kg_s / n_boreholes
+            if ground_loads.has_cooling else None
         ),
         pre_balanced=True,
     )
 
     # System brine temperatures
     sys_temps = compute_system_brine_temperatures(
-        sizing=sizing,
+        sizing=field_sizing,
         vhe_field=vhe_field,
         hydraulic=hydraulic,
-        heat_pumps=heat_pumps,
         P_heating_W=P_heating,
         times_heat_s=times_heat_s,
         P_cooling_W=P_cooling,
         times_cool_s=times_cool_s,
         soil=soil,
         dist_thermal_heat=dist_thermal["heating"],
-        dist_thermal_cool=dist_thermal["cooling"] if heat_pumps.has_cooling else None,
+        dist_thermal_cool=dist_thermal["cooling"] if ground_loads.has_cooling else None,
         pre_balanced=True,
     )
 
     # BHE pressure drop at peak flow (2 legs of the U-pipe)
     Di_bhe = float(vhe_field.pipe.outerDiameter) * (1.0 - 2.0 / float(vhe_field.pipe.SDR))
-    Q_per_bh_heat = heat_pumps.aggregated_mdot_peak_heat_kg_s / (n_boreholes * brine.rho)
-    bhe_dp_heat_Pa = float(_dp_per_m(brine.rho, brine.dynamicViscosity, Q_per_bh_heat, Di_bhe)) * 2.0 * sizing.H_m
+    Q_per_bh_heat = ground_loads.aggregated_mdot_peak_heat_kg_s / (n_boreholes * brine.rho)
+    bhe_dp_heat_Pa = (
+        float(_dp_per_m(brine.rho, brine.dynamicViscosity, Q_per_bh_heat, Di_bhe))
+        * 2.0 * field_sizing.L_m
+    )
 
     bhe_dp_cool_Pa: float | None = None
-    if heat_pumps.has_cooling:
-        Q_per_bh_cool = heat_pumps.aggregated_mdot_peak_cool_kg_s / (n_boreholes * brine.rho)
-        bhe_dp_cool_Pa = float(_dp_per_m(brine.rho, brine.dynamicViscosity, Q_per_bh_cool, Di_bhe)) * 2.0 * sizing.H_m
+    if ground_loads.has_cooling:
+        Q_per_bh_cool = ground_loads.aggregated_mdot_peak_cool_kg_s / (n_boreholes * brine.rho)
+        bhe_dp_cool_Pa = (
+            float(_dp_per_m(brine.rho, brine.dynamicViscosity, Q_per_bh_cool, Di_bhe))
+            * 2.0 * field_sizing.L_m
+        )
 
     return BHEWorkflowResult(
-        sizing=sizing,
+        sizing=field_sizing,
         sys_temps=sys_temps,
         P_bhe_heating_W=P_heating,
         P_bhe_cooling_W=P_cooling,
         P_full_heating_W=P_heat_full,
         P_full_cooling_W=P_cool_full,
         dist_thermal_heat=dist_thermal["heating"],
-        dist_thermal_cool=dist_thermal["cooling"] if heat_pumps.has_cooling else None,
+        dist_thermal_cool=dist_thermal["cooling"] if ground_loads.has_cooling else None,
         hydraulic=hydraulic,
         brine=brine,
         bhe_dp_heat_Pa=bhe_dp_heat_Pa,
@@ -193,8 +198,7 @@ def print_bhe_results(result: BHEWorkflowResult) -> None:
         v_cool = dp_m_cool = None
 
     # ── distribution network table ─────────────────────────────────────────
-    # Column inner widths (content between │ marks)
-    TC, DC, VC, RC, PC = 14, 8, 10, 9, 12  # trace, diameter, velocity, Re, dp/m
+    TC, DC, VC, RC, PC = 14, 8, 10, 9, 12
 
     base_cols = [TC, DC, DC, VC, RC, PC]
     cols = base_cols + ([VC, RC, PC] if has_cool_hydro else [])
@@ -249,21 +253,21 @@ def print_bhe_results(result: BHEWorkflowResult) -> None:
 
     # ── BHE sizing + pressure drop ─────────────────────────────────────────
     print()
-    print(f'  Borehole length  :  {sizing.H_m:.2f} m  (governed by {sizing.governing})')
-    print(f'  Borehole resist. :  {sizing.rb_heating.Rb_K_m_W:.4f} K·m/W  (heating)')
-    if sizing.rb_cooling is not None:
-        print(f'  Borehole resist. :  {sizing.rb_cooling.Rb_K_m_W:.4f} K·m/W  (cooling)')
+    print(f'  Borehole length  :  {sizing.L_m:.2f} m  (governed by {sizing.governing})')
+    print(f'  Borehole resist. :  {sizing.R_heating_K_m_W:.4f} K·m/W  (heating)')
+    if sizing.R_cooling_K_m_W is not None:
+        print(f'  Borehole resist. :  {sizing.R_cooling_K_m_W:.4f} K·m/W  (cooling)')
     print(f'  Dist. fraction   :  {result.dist_thermal_heat.F_total * 100:.1f} %  (heating, distribution grid)')
     if result.dist_thermal_cool is not None:
         print(f'  Dist. fraction   :  {result.dist_thermal_cool.F_total * 100:.1f} %  (cooling, distribution grid)')
-    bhe_dp_m_heat = result.bhe_dp_heat_Pa / (2.0 * sizing.H_m)
-    print(f'  BHE ΔP (heating) :  {result.bhe_dp_heat_Pa:,.0f} Pa  |  {bhe_dp_m_heat:.1f} Pa/m  (peak flow, 2 × {sizing.H_m:.2f} m U-pipe)')
+    bhe_dp_m_heat = result.bhe_dp_heat_Pa / (2.0 * sizing.L_m)
+    print(f'  BHE ΔP (heating) :  {result.bhe_dp_heat_Pa:,.0f} Pa  |  {bhe_dp_m_heat:.1f} Pa/m  (peak flow, 2 × {sizing.L_m:.2f} m U-pipe)')
     if result.bhe_dp_cool_Pa is not None:
-        bhe_dp_m_cool = result.bhe_dp_cool_Pa / (2.0 * sizing.H_m)
-        print(f'  BHE ΔP (cooling) :  {result.bhe_dp_cool_Pa:,.0f} Pa  |  {bhe_dp_m_cool:.1f} Pa/m  (peak flow, 2 × {sizing.H_m:.2f} m U-pipe)')
+        bhe_dp_m_cool = result.bhe_dp_cool_Pa / (2.0 * sizing.L_m)
+        print(f'  BHE ΔP (cooling) :  {result.bhe_dp_cool_Pa:,.0f} Pa  |  {bhe_dp_m_cool:.1f} Pa/m  (peak flow, 2 × {sizing.L_m:.2f} m U-pipe)')
 
     # ── brine temperatures table ───────────────────────────────────────────
-    LW, VW = 36, 14  # label / value column inner widths
+    LW, VW = 36, 14
 
     top_t = f"┌{'─'*LW}┬{'─'*VW}┬{'─'*VW}┬{'─'*VW}┐"
     div_t = f"├{'─'*LW}┼{'─'*VW}┼{'─'*VW}┼{'─'*VW}┤"

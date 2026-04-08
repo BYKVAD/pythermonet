@@ -6,7 +6,7 @@ import numpy as np
 from pythermonet.components.pipe_infrastructure import PipeInfrastructure
 from pythermonet.core.material import Material
 
-@dataclass
+@dataclass(frozen=True)
 class DistributionNetwork:
     infrastructure: PipeInfrastructure
     trace_names: list[str]
@@ -37,4 +37,4 @@ class DistributionNetwork:
                 )
 
         # sæt globalMaterial til første
-        self.globalMaterial = first
+        object.__setattr__(self, "globalMaterial", first)

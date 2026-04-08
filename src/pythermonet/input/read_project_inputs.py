@@ -8,14 +8,14 @@ import numpy as np
 from pythermonet.core.material import Material
 from pythermonet.core.annulus import Annulus
 from pythermonet.core.heat_carrier import HeatCarrier
-from pythermonet.components.heat_pumps import HeatPumps
+from pythermonet.components.heat_pump import HeatPump
 
 from pythermonet.input.read_pipe_catalogue import read_pipe_catalogue
 from pythermonet.input.read_topology import read_undimensioned_topology_tsv_to_infrastructure
 from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
 
 
-@dataclass
+@dataclass(frozen=True)
 class ProjectInputs:
     pipe_catalogue: list[Annulus]         # geometric catalogue entries
     d_pipes_m: np.ndarray                 # unique outer diameters [m]
@@ -23,7 +23,7 @@ class ProjectInputs:
     pipe_group_names: list[str]
     hp_id_groups: list[np.ndarray]
     dp_PG: np.ndarray
-    heat_pumps: HeatPumps
+    heat_pump_list: list[HeatPump]
 
 
 def load_project_inputs(
@@ -57,11 +57,8 @@ def load_project_inputs(
         )
     )
 
-    # 3) Heat pumps (directly to HeatPumps)
-    heat_pumps = read_heat_pumps_tsv(
-        path=str(heat_pump_file),
-        source_heat_carrier=source_heat_carrier,
-    )
+    # 3) Heat pumps
+    heat_pump_list = read_heat_pumps_tsv(path=str(heat_pump_file))
 
     return ProjectInputs(
         pipe_catalogue=pipe_catalogue,
@@ -70,5 +67,5 @@ def load_project_inputs(
         pipe_group_names=pipe_group_names,
         hp_id_groups=hp_id_groups,
         dp_PG=dp_PG,
-        heat_pumps=heat_pumps,
+        heat_pump_list=heat_pump_list,
     )

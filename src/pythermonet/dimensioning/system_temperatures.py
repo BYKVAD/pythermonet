@@ -8,7 +8,7 @@ import numpy as np
 from pythermonet.components.vhe_field import VHEField
 from pythermonet.core.soil import Soil
 from pythermonet.dimensioning.hydraulic_result import HydraulicResult
-from pythermonet.dimensioning.BHE.borehole_length import BoreholeSizingResult, apply_annual_balance
+from pythermonet.dimensioning.BHE.borehole_length import FieldSizingResult, apply_annual_balance
 from pythermonet.simulation.distribution_pipe_thermal_model import ModeResult as DistModeResult
 
 
@@ -140,10 +140,9 @@ def _bhe_mean_temperatures_cooling(
 
 def compute_system_brine_temperatures(
     *,
-    sizing: BoreholeSizingResult,
+    sizing: FieldSizingResult,
     vhe_field: VHEField,
     hydraulic: HydraulicResult,
-    heat_pumps,
     P_heating_W: np.ndarray,
     times_heat_s: np.ndarray,
     P_cooling_W: np.ndarray | None = None,
@@ -188,7 +187,7 @@ def compute_system_brine_temperatures(
     """
     has_cooling = P_cooling_W is not None
 
-    H_m = sizing.H_m
+    H_m = sizing.L_m
     alpha = float(soil.thermalCond) / (float(soil.rho) * float(soil.c))
     P_heating_W = np.asarray(P_heating_W, dtype=float)
 
@@ -226,7 +225,7 @@ def compute_system_brine_temperatures(
     # BHE mean temperatures at each heating pulse
     # ------------------------------------------------------------------
     T_h_ann, T_h_win, T_h_peak = _bhe_mean_temperatures_heating(
-        H_m, P_heating_W, g_heat, vhe_field, soil, sizing.rb_heating.Rb_K_m_W
+        H_m, P_heating_W, g_heat, vhe_field, soil, sizing.R_heating_K_m_W
     )
 
     # ------------------------------------------------------------------
@@ -267,7 +266,7 @@ def compute_system_brine_temperatures(
             times_s=times_cool_s, alpha_m2_s=alpha
         )
         T_c_ann, T_c_win, T_c_peak = _bhe_mean_temperatures_cooling(
-            H_m, P_cooling_W, g_cool, vhe_field, soil, sizing.rb_cooling.Rb_K_m_W
+            H_m, P_cooling_W, g_cool, vhe_field, soil, sizing.R_cooling_K_m_W
         )
         if dist_thermal_cool is not None:
             T_dc = np.asarray(dist_thermal_cool.T_dimv_C, dtype=float)

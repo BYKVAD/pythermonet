@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 from pathlib import Path
 
-from pythermonet.components.heat_pumps import HeatPumps
+from pythermonet.components.ground_loads import ground_loads_from_heat_pumps
 from pythermonet.components.vhe_field import VHEField
 from pythermonet.core.annulus import Annulus
 from pythermonet.core.heat_carrier import HeatCarrier
@@ -98,9 +98,9 @@ def bhe_dimensioning():
     hp_list = read_heat_pumps_tsv(
         path=_EXAMPLE_DIR / "data" / "silkeborg_heat_pump_heat_high_cool.dat"
     )
-    heat_pumps = HeatPumps(
-        heatPumpList=hp_list,
-        brine=brine,
+    loads = ground_loads_from_heat_pumps(
+        hp_list,
+        brine,
         peak_heating_h=4.0,
         peak_fraction_heating_mode="incremental",
         peak_fraction_heating=1.0,
@@ -111,10 +111,10 @@ def bhe_dimensioning():
 
     sizing = SizingParameters(time_horizon_years=30.0)
 
-    hydraulic = run_pipedimensioning(pipe_catalogue, brine, network, heat_pumps)
+    hydraulic = run_pipedimensioning(pipe_catalogue, brine, network, hp_list)
 
     result = run_bhe_sizing_workflow(
-        heat_pumps=heat_pumps,
+        ground_loads=loads,
         vhe_field=bhe_field,
         hydraulic=hydraulic,
         brine=brine,
@@ -134,7 +134,7 @@ def bhe_dimensioning():
 # Trace order: Main_line, Inner_distribution_ring_1, Inner_distribution_ring_2,
 #              Single_branch, Connection_pipes_6_kW, Connection_pipes_10_kW
 
-_REF_OD_MM    = [110.0, 90.0, 75.0, 75.0, 50.0, 50.0]   # mm
+_REF_OD_MM    = [110.0, 90.0, 75.0, 75.0, 50.0, 50.0]
 _REF_RE_HEAT  = [7948,  6322, 4547, 3297, 1729, 2882]
 _REF_RE_COOL  = [11871, 9862, 6259, 5144, 2698, 2698]
 
@@ -170,10 +170,7 @@ class TestHydraulicDimensioning:
     def test_governing_mode_cooling_dominates_main(self, bhe_dimensioning):
         """Main line should be governed by cooling (larger flow)."""
         hydraulic, _ = bhe_dimensioning
-        # cooling governs at least one trace
-        assert "cooling" in list(hydraulic.governing_mode), (
-            "Expected at least one trace governed by cooling"
-        )
+        assert "cooling" in list(hydraulic.governing_mode)
 
 
 # ===========================================================================
@@ -184,26 +181,24 @@ class TestBHEThermalDimensioning:
 
     def test_borehole_length(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        assert abs(result.sizing.H_m - 168.98) < 0.5, (
-            f"Borehole length {result.sizing.H_m:.2f} m deviates >0.5 m from 168.98 m"
+        assert abs(result.sizing.L_m - 168.98) < 0.5, (
+            f"Borehole length {result.sizing.L_m:.2f} m deviates >0.5 m from 168.98 m"
         )
 
     def test_governing_mode_cooling(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        assert result.sizing.governing == "cooling", (
-            f"Expected governing='cooling', got '{result.sizing.governing}'"
-        )
+        assert result.sizing.governing == "cooling"
 
     def test_borehole_resistance_heating(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        rb = result.sizing.rb_heating.Rb_K_m_W
+        rb = result.sizing.R_heating_K_m_W
         assert abs(rb - 0.1339) < 0.002, (
             f"Rb (heating) = {rb:.4f} K·m/W deviates >0.002 from 0.1339"
         )
 
     def test_borehole_resistance_cooling(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        rb = result.sizing.rb_cooling.Rb_K_m_W
+        rb = result.sizing.R_cooling_K_m_W
         assert abs(rb - 0.1248) < 0.002, (
             f"Rb (cooling) = {rb:.4f} K·m/W deviates >0.002 from 0.1248"
         )
@@ -211,48 +206,32 @@ class TestBHEThermalDimensioning:
     def test_distribution_fraction_heating(self, bhe_dimensioning):
         _, result = bhe_dimensioning
         f = result.dist_thermal_heat.F_total
-        assert abs(f * 100 - 36.8) < 0.5, (
-            f"Dist. fraction (heating) = {f*100:.1f}% deviates >0.5% from 36.8%"
-        )
+        assert abs(f * 100 - 36.8) < 0.5
 
     def test_distribution_fraction_cooling(self, bhe_dimensioning):
         _, result = bhe_dimensioning
         f = result.dist_thermal_cool.F_total
-        assert abs(f * 100 - 26.7) < 0.5, (
-            f"Dist. fraction (cooling) = {f*100:.1f}% deviates >0.5% from 26.7%"
-        )
+        assert abs(f * 100 - 26.7) < 0.5
 
     def test_system_temperature_heating_annual(self, bhe_dimensioning):
         _, result = bhe_dimensioning
         T = result.sys_temps.T_avg_heat_annual_C
-        assert abs(T - 3.54) < 0.05, (
-            f"T_avg_heat_annual = {T:.2f}°C deviates >0.05°C from 3.54°C"
-        )
+        assert abs(T - 3.54) < 0.05
 
     def test_system_temperature_heating_winter(self, bhe_dimensioning):
         _, result = bhe_dimensioning
         T = result.sys_temps.T_avg_heat_winter_C
-        assert abs(T - (-0.41)) < 0.05, (
-            f"T_avg_heat_winter = {T:.2f}°C deviates >0.05°C from -0.41°C"
-        )
+        assert abs(T - (-0.41)) < 0.05
 
     def test_system_temperature_heating_peak(self, bhe_dimensioning):
         _, result = bhe_dimensioning
         T = result.sys_temps.T_avg_heat_peak_C
-        assert abs(T - (-2.59)) < 0.05, (
-            f"T_avg_heat_peak = {T:.2f}°C deviates >0.05°C from -2.59°C"
-        )
+        assert abs(T - (-2.59)) < 0.05
 
     def test_bhe_pressure_drop_heating(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        dp = result.bhe_dp_heat_Pa
-        assert abs(dp - 78_524) < 500, (
-            f"BHE ΔP (heating) = {dp:.0f} Pa deviates >500 Pa from 78,524 Pa"
-        )
+        assert abs(result.bhe_dp_heat_Pa - 78_524) < 500
 
     def test_bhe_pressure_drop_cooling(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        dp = result.bhe_dp_cool_Pa
-        assert abs(dp - 155_427) < 1000, (
-            f"BHE ΔP (cooling) = {dp:.0f} Pa deviates >1000 Pa from 155,427 Pa"
-        )
+        assert abs(result.bhe_dp_cool_Pa - 155_427) < 1000

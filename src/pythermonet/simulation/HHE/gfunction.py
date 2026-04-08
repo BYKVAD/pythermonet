@@ -89,17 +89,23 @@ class HHEGFunction:
         self._r_pipe = float(self._trace[0].outerDiameter / 2.0) if self._trace[0].outerDiameter is not None else 0.0
 
         if time is not None:
-            self.evaluate(np.asarray(time, dtype=float))
+            t = np.asarray(time, dtype=float)
+            self._time = t
+            self.gFunc = self.evaluate(t)
+        else:
+            self._time = None
+            self.gFunc = None
 
     def evaluate(self, time: np.ndarray) -> np.ndarray:
         """
-        Evaluate the g-function at each value in time (s).
+        Compute and return the g-function at each value in time (s).
+
+        Pure function — does not mutate this instance.
 
         Returns
         -------
         np.ndarray, shape (K,)
         """
-        self._time = time
         g = np.zeros(len(time))
 
         for k, t in enumerate(time):
@@ -107,7 +113,6 @@ class HHEGFunction:
                 print(f"  [{k+1}/{len(time)}]  t = {t:.3e} s", flush=True)
             g[k] = self._eval_single(t)
 
-        self.gFunc = g
         return g
 
     def _eval_single(self, t: float) -> float:

@@ -52,14 +52,14 @@ def compute_distribution_pipe_thermal_capacity(
     hydraulic: HydraulicResult,
     brine: HeatCarrier,
     soil: Soil,
-    heat_pumps,
+    ground_loads,
     times_heat_s: np.ndarray,
     times_cool_s: Optional[np.ndarray] = None,
     T_brine_min_heat: float = 0.0,
     T_brine_max_cool: Optional[float] = None,
 ) -> dict[str, ModeResult]:
-    P_heat = np.asarray(heat_pumps.heating_ground_load_W, dtype=float)
-    P_cool = getattr(heat_pumps, "cooling_ground_load_W", None)
+    P_heat = np.asarray(ground_loads.heating_ground_load_W, dtype=float)
+    P_cool = getattr(ground_loads, "cooling_ground_load_W", None)
 
     if P_cool is not None:
         P_heat, P_cool = apply_annual_balance(P_heat, np.asarray(P_cool, dtype=float))
@@ -68,7 +68,7 @@ def compute_distribution_pipe_thermal_capacity(
         times_s=np.asarray(times_heat_s, dtype=float),
         powers_W=P_heat,
         Ti_C=float(T_brine_min_heat),
-        To_C=float(T_brine_min_heat - heat_pumps.deltaT_sys_heat),
+        To_C=float(T_brine_min_heat - ground_loads.deltaT_sys_heat),
     )
 
     pipe_groups_heat = _build_pipe_groups_from_hydraulic(hydraulic, Re_arr=hydraulic.Re_heating)
@@ -94,7 +94,7 @@ def compute_distribution_pipe_thermal_capacity(
             times_s=np.asarray(times_cool_s, dtype=float),
             powers_W=np.asarray(P_cool, dtype=float),
             Ti_C=float(T_brine_max_cool),
-            To_C=float(T_brine_max_cool + heat_pumps.deltaT_sys_cool),
+            To_C=float(T_brine_max_cool + ground_loads.deltaT_sys_cool),
         )
 
         # Use the cooling Reynolds number so the pipe thermal resistance is

@@ -8,7 +8,7 @@ from pythermonet.core.soil import Soil
 from pythermonet.components.vhe_field import VHEField
 from pythermonet.core.annulus import Annulus
 from pythermonet.core.pipe_segment import PipeSegment
-from pythermonet.components.aggregated_heat_pumps import AggregatedHeatPumps
+from pythermonet.components.ground_loads import ground_loads_from_district
 from pythermonet.input.read_aggregated_load import read_aggregated_load_tsv
 from pythermonet.input.read_dimensioned_topology import read_dimensioned_topology_tsv_to_hydraulic
 from pythermonet.dimensioning.BHE.bhe_workflow import run_bhe_sizing_workflow, print_bhe_results
@@ -94,9 +94,9 @@ BHEfield = VHEField(
 # -----------------------------------------------------------------------------
 agg_load_input = read_aggregated_load_tsv(agg_load_file)
 
-heat_pumps = AggregatedHeatPumps(
-    load_input=agg_load_input,
-    brine=brine,
+loads = ground_loads_from_district(
+    agg_load_input,
+    brine,
     f_peak_heating=1.0,
     f_peak_cooling=1.0,
     peak_heating_h=4.0,
@@ -115,7 +115,7 @@ T_BRINE_MAX_COOL = 25.0   # HP condenser inlet limit [°C]
 # 6) BHE sizing workflow + results
 # -----------------------------------------------------------------------------
 result = run_bhe_sizing_workflow(
-    heat_pumps=heat_pumps,
+    ground_loads=loads,
     vhe_field=BHEfield,
     hydraulic=hydraulic,
     brine=brine,

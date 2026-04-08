@@ -8,7 +8,7 @@ import numpy as np
 from pythermonet.components.vhe_field import VHEField
 from pythermonet.core.heat_carrier import HeatCarrier
 from pythermonet.core.soil import Soil
-from pythermonet.physics.bhe_resistance import compute_rb_for_vhe_field, BHEResistanceResult
+from pythermonet.physics.bhe_resistance import compute_rb_for_vhe_field
 from pythermonet.physics.sources import ils
 
 
@@ -40,12 +40,6 @@ def apply_annual_balance(
     return P_h, P_c
 
 
-@dataclass(frozen=True)
-class BoreholeSizingResult:
-    H_m: float                                  # Required borehole length [m]
-    governing: str                              # "heating" or "cooling"
-    rb_heating: BHEResistanceResult             # Rb at final H with heating flow rate
-    rb_cooling: BHEResistanceResult | None      # Rb at final H with cooling flow rate (None if heating-only)
 
 
 # ---------------------------------------------------------------------------
@@ -388,7 +382,7 @@ def size_borehole_length_heating_cooling(
     H_max: float = 500.0,
     tol_m: float = 0.01,
     pre_balanced: bool = False,
-) -> BoreholeSizingResult:
+) -> FieldSizingResult:
     """
     Find the minimum borehole length satisfying both heating and cooling
     temperature constraints.
@@ -409,9 +403,9 @@ def size_borehole_length_heating_cooling(
 
     Returns
     -------
-    BoreholeSizingResult
-        H_m, governing mode, and separate Rb for heating and cooling at the
-        final borehole length.
+    FieldSizingResult
+        L_m (borehole depth), governing mode, and Rb for heating and
+        cooling at the final depth.
     """
     has_cooling = P_cooling_W is not None
 
@@ -424,12 +418,12 @@ def size_borehole_length_heating_cooling(
         if not pre_balanced:
             P_heating_W, P_cooling_W = apply_annual_balance(P_heating_W, np.asarray(P_cooling_W, dtype=float))
 
-    def _rb_final(H: float, m_dot: float) -> BHEResistanceResult:
+    def _rb_final(H: float, m_dot: float) -> float:
         return compute_rb_for_vhe_field(
             vhe_field=vhe_field, brine=brine, soil=soil,
             L_bhe_m=H, m_dot_kg_s=m_dot,
             use_flow_length_correction=True,
-        )
+        ).Rb_K_m_W
 
     # --- Step 1: size for heating ---
     H_heat = size_borehole_length(
@@ -447,11 +441,11 @@ def size_borehole_length_heating_cooling(
 
     # --- Heating-only: return immediately ---
     if not has_cooling:
-        return BoreholeSizingResult(
-            H_m=H_heat,
+        return FieldSizingResult(
+            L_m=H_heat,
             governing="heating",
-            rb_heating=_rb_final(H_heat, m_dot_per_borehole_heat_kg_s),
-            rb_cooling=None,
+            R_heating_K_m_W=_rb_final(H_heat, m_dot_per_borehole_heat_kg_s),
+            R_cooling_K_m_W=None,
         )
 
     # --- Step 2: quick check — is cooling already satisfied at H_heat? ---
@@ -459,11 +453,11 @@ def size_borehole_length_heating_cooling(
         H_heat, P_cooling_W, times_cool_s, vhe_field, brine, soil, m_dot_per_borehole_cool_kg_s, alpha
     )
     if T_cool_at_H_heat <= T_fluid_max:
-        return BoreholeSizingResult(
-            H_m=H_heat,
+        return FieldSizingResult(
+            L_m=H_heat,
             governing="heating",
-            rb_heating=_rb_final(H_heat, m_dot_per_borehole_heat_kg_s),
-            rb_cooling=_rb_final(H_heat, m_dot_per_borehole_cool_kg_s),
+            R_heating_K_m_W=_rb_final(H_heat, m_dot_per_borehole_heat_kg_s),
+            R_cooling_K_m_W=_rb_final(H_heat, m_dot_per_borehole_cool_kg_s),
         )
 
     # --- Step 3: cooling is binding — ILS bracket then bisect ---
@@ -503,11 +497,11 @@ def size_borehole_length_heating_cooling(
             hi = mid
 
     H_cool = 0.5 * (lo + hi)
-    return BoreholeSizingResult(
-        H_m=H_cool,
+    return FieldSizingResult(
+        L_m=H_cool,
         governing="cooling",
-        rb_heating=_rb_final(H_cool, m_dot_per_borehole_heat_kg_s),
-        rb_cooling=_rb_final(H_cool, m_dot_per_borehole_cool_kg_s),
+        R_heating_K_m_W=_rb_final(H_cool, m_dot_per_borehole_heat_kg_s),
+        R_cooling_K_m_W=_rb_final(H_cool, m_dot_per_borehole_cool_kg_s),
     )
 
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 
-from pythermonet.components.aggregated_heat_pumps import AggregatedHeatPumps
+from pythermonet.components.ground_loads import ground_loads_from_district
 from pythermonet.components.pipe_infrastructure import PipeInfrastructure
 from pythermonet.core.heat_carrier import HeatCarrier
 from pythermonet.core.material import Material
@@ -90,9 +90,9 @@ def hhe_dimensioning():
     agg_load_input = read_aggregated_load_tsv(
         _EXAMPLE_DIR / "data" / "silkeborg_hhe_aggregated_load_heat.dat"
     )
-    heat_pumps = AggregatedHeatPumps(
-        load_input=agg_load_input,
-        brine=brine,
+    loads = ground_loads_from_district(
+        agg_load_input,
+        brine,
         f_peak_heating=1.0,
         f_peak_cooling=1.0,
         peak_heating_h=4.0,
@@ -102,7 +102,7 @@ def hhe_dimensioning():
     sizing = SizingParameters(time_horizon_years=30.0)
 
     result = run_hhe_sizing_workflow(
-        heat_pumps=heat_pumps,
+        ground_loads=loads,
         hhe_field=hhe_field,
         pipe_infrastructure=pipe_infrastructure,
         hydraulic=hydraulic,

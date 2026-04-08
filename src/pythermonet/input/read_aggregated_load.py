@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 
-@dataclass
+@dataclass(frozen=True)
 class AggregatedLoadInput:
     """
     Aggregated heating (and optional cooling) loads for an entire district.
@@ -39,11 +39,11 @@ class AggregatedLoadInput:
     has_cooling: bool = field(init=False)
 
     def __post_init__(self) -> None:
-        self.has_cooling = (
+        object.__setattr__(self, "has_cooling", (
             self.load_daily_peak_cooling > 0.0
             and self.eer_cooling > 0.0
             and self.deltaT_cooling > 0.0
-        )
+        ))
 
 
 def read_aggregated_load_tsv(path: str | Path) -> AggregatedLoadInput:

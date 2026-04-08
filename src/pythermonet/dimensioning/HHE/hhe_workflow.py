@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from pythermonet.components.ground_loads import GroundLoads
 from pythermonet.components.pipe_infrastructure import PipeInfrastructure
 from pythermonet.core.heat_carrier import HeatCarrier
 from pythermonet.core.soil import Soil
@@ -87,7 +88,7 @@ def _hhe_mean_temperatures(
 
 def run_hhe_sizing_workflow(
     *,
-    heat_pumps,
+    ground_loads: GroundLoads,
     hhe_field: HHEGroundField,
     pipe_infrastructure: PipeInfrastructure,
     hydraulic: HydraulicResult,
@@ -111,10 +112,10 @@ def run_hhe_sizing_workflow(
     pipe_infrastructure : PipeInfrastructure
         Raw HHE definition — used for volume calculation.
     """
-    P_heat_full = np.asarray(heat_pumps.heating_ground_load_W, dtype=float)
+    P_heat_full = np.asarray(ground_loads.heating_ground_load_W, dtype=float)
     P_cool_full = (
-        np.asarray(heat_pumps.cooling_ground_load_W, dtype=float)
-        if heat_pumps.has_cooling else None
+        np.asarray(ground_loads.cooling_ground_load_W, dtype=float)
+        if ground_loads.has_cooling else None
     )
 
     # Two-sided annual balance: for shallow HHE the isothermal surface
@@ -128,10 +129,10 @@ def run_hhe_sizing_workflow(
     if P_cool_full is not None:
         P_heat_full, P_cool_full = apply_annual_balance(P_heat_full, P_cool_full)
 
-    times_heat_s = sizing.times_s_peak_heating(heat_pumps.peak_heating_h)
+    times_heat_s = sizing.times_s_peak_heating(ground_loads.peak_heating_h)
     times_cool_s = (
-        sizing.times_s_peak_cooling(heat_pumps.peak_cooling_h)
-        if heat_pumps.has_cooling else None
+        sizing.times_s_peak_cooling(ground_loads.peak_cooling_h)
+        if ground_loads.has_cooling else None
     )
 
     # Distribution pipe thermal model
@@ -139,18 +140,18 @@ def run_hhe_sizing_workflow(
         hydraulic=hydraulic,
         brine=brine,
         soil=soil,
-        heat_pumps=heat_pumps,
+        ground_loads=ground_loads,
         times_heat_s=np.flip(times_heat_s),
         times_cool_s=np.flip(times_cool_s) if times_cool_s is not None else None,
         T_brine_min_heat=T_brine_min_heat,
-        T_brine_max_cool=T_brine_max_cool if heat_pumps.has_cooling else None,
+        T_brine_max_cool=T_brine_max_cool if ground_loads.has_cooling else None,
     )
 
     # HHE loads = full balanced loads × (1 − distribution fraction)
     P_heating = (1 - dist_thermal["heating"].F_total) * P_heat_full
     P_cooling = (
         (1 - dist_thermal["cooling"].F_total) * P_cool_full
-        if heat_pumps.has_cooling else None
+        if ground_loads.has_cooling else None
     )
 
     n_pipes = pipe_infrastructure.NParallelPipes
@@ -158,26 +159,26 @@ def run_hhe_sizing_workflow(
 
     # Size pipe length
     sizing = size_ground_field_length_heating_cooling(
-        T_fluid_min=T_brine_min_heat - 0.5 * heat_pumps.deltaT_sys_heat,
+        T_fluid_min=T_brine_min_heat - 0.5 * ground_loads.deltaT_sys_heat,
         P_heating_W=P_heating,
         times_heat_s=times_heat_s,
-        T_fluid_max=T_brine_max_cool + (0.5 * heat_pumps.deltaT_sys_cool if heat_pumps.has_cooling else 0.0),
+        T_fluid_max=T_brine_max_cool + (0.5 * ground_loads.deltaT_sys_cool if ground_loads.has_cooling else 0.0),
         P_cooling_W=P_cooling,
         times_cool_s=times_cool_s,
         field=hhe_field,
         brine=brine,
         soil=soil,
-        m_dot_per_element_heat=heat_pumps.aggregated_mdot_peak_heat_kg_s / n_loops,
+        m_dot_per_element_heat=ground_loads.aggregated_mdot_peak_heat_kg_s / n_loops,
         m_dot_per_element_cool=(
-            heat_pumps.aggregated_mdot_peak_cool_kg_s / n_loops
-            if heat_pumps.has_cooling else None
+            ground_loads.aggregated_mdot_peak_cool_kg_s / n_loops
+            if ground_loads.has_cooling else None
         ),
         pre_balanced=True,  # no annual balance for HHE (HFLS already models surface reset)
     )
 
     L = sizing.L_m
     alpha_heat = hhe_field.k_s_eff_heating(soil) / (float(soil.rho) * float(soil.c))
-    m_dot_heat = heat_pumps.aggregated_mdot_peak_heat_kg_s / n_loops
+    m_dot_heat = ground_loads.aggregated_mdot_peak_heat_kg_s / n_loops
 
     # HHE temperatures at each pulse (heating)
     g_heat = hhe_field.compute_gfunction(L, np.asarray(times_heat_s, dtype=float), alpha_heat)
@@ -188,9 +189,9 @@ def run_hhe_sizing_workflow(
 
     # Cooling temperatures
     T_c_ann = T_c_win = T_c_peak = None
-    if heat_pumps.has_cooling:
+    if ground_loads.has_cooling:
         alpha_cool = hhe_field.k_s_eff_cooling(soil) / (float(soil.rho) * float(soil.c))
-        m_dot_cool = heat_pumps.aggregated_mdot_peak_cool_kg_s / n_loops
+        m_dot_cool = ground_loads.aggregated_mdot_peak_cool_kg_s / n_loops
         g_cool = hhe_field.compute_gfunction(L, np.asarray(times_cool_s, dtype=float), alpha_cool)
         R_cool = hhe_field.R_at_L(L, m_dot_cool, brine, soil)
         T_c_ann, T_c_win, T_c_peak = _hhe_mean_temperatures(
@@ -220,19 +221,19 @@ def run_hhe_sizing_workflow(
     T_avg_heat_peak   = _weighted(T_h_peak, T_d[2])
 
     T_avg_cool_annual = T_avg_cool_winter = T_avg_cool_peak = None
-    if heat_pumps.has_cooling:
+    if ground_loads.has_cooling:
         T_dc = np.asarray(dist_thermal["cooling"].T_dimv_C, dtype=float)
         T_avg_cool_annual = _weighted(T_c_ann,  T_dc[0])
         T_avg_cool_winter = _weighted(T_c_win,  T_dc[1])
         T_avg_cool_peak   = _weighted(T_c_peak, T_dc[2])
 
     # HHE pressure drop (full loop = out + return = 2 × L)
-    Q_per_loop_heat = heat_pumps.aggregated_mdot_peak_heat_kg_s / (n_loops * brine.rho)
+    Q_per_loop_heat = ground_loads.aggregated_mdot_peak_heat_kg_s / (n_loops * brine.rho)
     hhe_dp_heat_Pa = float(_dp_per_m(brine.rho, brine.dynamicViscosity, Q_per_loop_heat, Di_hhe)) * 2.0 * L
 
     hhe_dp_cool_Pa: float | None = None
-    if heat_pumps.has_cooling:
-        Q_per_loop_cool = heat_pumps.aggregated_mdot_peak_cool_kg_s / (n_loops * brine.rho)
+    if ground_loads.has_cooling:
+        Q_per_loop_cool = ground_loads.aggregated_mdot_peak_cool_kg_s / (n_loops * brine.rho)
         hhe_dp_cool_Pa = float(_dp_per_m(brine.rho, brine.dynamicViscosity, Q_per_loop_cool, Di_hhe)) * 2.0 * L
 
     return HHEWorkflowResult(
@@ -254,7 +255,7 @@ def run_hhe_sizing_workflow(
         P_full_heating_W=P_heat_full,
         P_full_cooling_W=P_cool_full,
         dist_thermal_heat=dist_thermal["heating"],
-        dist_thermal_cool=dist_thermal["cooling"] if heat_pumps.has_cooling else None,
+        dist_thermal_cool=dist_thermal["cooling"] if ground_loads.has_cooling else None,
         hydraulic=hydraulic,
         brine=brine,
         hhe_dp_heat_Pa=hhe_dp_heat_Pa,

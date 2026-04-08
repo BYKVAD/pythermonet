@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-from pythermonet.components.heat_pumps import HeatPumps
+from pythermonet.components.ground_loads import ground_loads_from_heat_pumps
 from pythermonet.core.material import Material
 from pythermonet.core.heat_carrier import HeatCarrier
 from pythermonet.core.soil import Soil
@@ -114,9 +114,9 @@ BHEfield = VHEField(
 # -----------------------------------------------------------------------------
 hp_list = read_heat_pumps_tsv(path=heat_pump_file)
 
-heat_pumps = HeatPumps(
-    heatPumpList=hp_list,
-    brine=brine,
+loads = ground_loads_from_heat_pumps(
+    hp_list,
+    brine,
     peak_heating_h=4.0,
     peak_fraction_heating_mode="incremental",
     peak_fraction_heating=1.0,
@@ -140,14 +140,14 @@ hydraulic = run_pipedimensioning(
     pipe_catalogue,
     brine,
     distribution_network_undimensioned,
-    heat_pumps,
+    hp_list,
 )
 
 # -----------------------------------------------------------------------------
 # 8) BHE sizing workflow + results
 # -----------------------------------------------------------------------------
 result = run_bhe_sizing_workflow(
-    heat_pumps=heat_pumps,
+    ground_loads=loads,
     vhe_field=BHEfield,
     hydraulic=hydraulic,
     brine=brine,

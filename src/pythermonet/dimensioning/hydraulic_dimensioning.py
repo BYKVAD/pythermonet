@@ -15,7 +15,7 @@ def run_pipedimensioning(
     pipe_catalogue,   # Iterable of pipe catalogue entries (outerDiameter, SDR, ...)
     brine,            # HeatCarrier (rho, c, dynamicViscosity)
     network,          # DistributionNetwork
-    heat_pumps,       # HeatPumps
+    heat_pump_list,   # list[HeatPump]
 ) -> HydraulicResult:
     """
     Dimensionerer distributionsrør pr. trace ud fra tryktabskriterium i både
@@ -31,13 +31,13 @@ def run_pipedimensioning(
         dtype=float,
     )
 
-    hp_by_id = {hp.ID: hp for hp in heat_pumps.heatPumpList}
+    hp_by_id = {hp.ID: hp for hp in heat_pump_list}
     N_trace = len(network.hp_id_trace)
 
     doCooling = any(
         np.isfinite(getattr(hp, "peakCooling_ground_load", 0.0))
         and hp.peakCooling_ground_load != 0.0
-        for hp in heat_pumps.heatPumpList
+        for hp in heat_pump_list
     )
 
     m3_s_per_trace_heating = np.zeros(N_trace, dtype=float)
