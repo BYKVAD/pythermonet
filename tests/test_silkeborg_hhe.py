@@ -1,0 +1,180 @@
+"""
+test_silkeborg_hhe.py
+---------------------
+Regression tests for the Silkeborg HHE full-dimensioning example
+(heat only, pre-dimensioned topology, aggregated load).
+
+Reference values were captured from:
+  examples/silkeborg_hhe_full_dimensioning_heat/main.py
+
+Run with:
+    python -m pytest tests/test_silkeborg_hhe.py -v
+"""
+from __future__ import annotations
+
+import pytest
+from pathlib import Path
+
+from pythermonet.components.aggregated_heat_pumps import AggregatedHeatPumps
+from pythermonet.components.pipe_infrastructure import PipeInfrastructure
+from pythermonet.core.heat_carrier import HeatCarrier
+from pythermonet.core.material import Material
+from pythermonet.core.pipe_segment import PipeSegment
+from pythermonet.core.soil import Soil
+from pythermonet.dimensioning.ground_field import HHEGroundField
+from pythermonet.dimensioning.HHE.hhe_workflow import run_hhe_sizing_workflow
+from pythermonet.dimensioning.sizing_parameters import SizingParameters
+from pythermonet.input.read_aggregated_load import read_aggregated_load_tsv
+from pythermonet.input.read_dimensioned_topology import (
+    read_dimensioned_topology_tsv_to_hydraulic,
+)
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+_EXAMPLE_DIR = (
+    Path(__file__).resolve().parents[1]
+    / "examples"
+    / "silkeborg_hhe_full_dimensioning_heat"
+)
+
+# ---------------------------------------------------------------------------
+# Module-scoped fixture — runs the full dimensioning once for all tests.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def hhe_dimensioning():
+    """Return result from the Silkeborg HHE full-dimensioning run."""
+    pipe_material_dist = Material(rho=975, c=1900, thermalCond=0.4)
+
+    brine = HeatCarrier(
+        rho=965, c=4450, thermalCond=0.45, dynamicViscosity=5e-3
+    )
+
+    soil = Soil(
+        rho=2500,
+        c=1000,
+        thermalCond=1.25,
+        thermalCondShallowHeating=1.25,
+        thermalCondShallowCooling=1.25,
+        Qgeo=0.0185,
+        surfaceTemp=9.03,
+        surfaceTempAmp=7.9,
+    )
+
+    _, hydraulic = read_dimensioned_topology_tsv_to_hydraulic(
+        _EXAMPLE_DIR / "data" / "silkeborg_hhe_topology_dimensioned.dat",
+        pipe_material=pipe_material_dist,
+        brine=brine,
+        burial_depth=1.2,
+        pipe_distance=0.3,
+        n_parallel_pipes=2,
+    )
+
+    hhe_segment = PipeSegment(
+        outerDiameter=0.040, SDR=17.0, material=pipe_material_dist,
+        roughnessHeight=1e-6, ID=0, length=100.0,
+    )
+    pipe_infrastructure = PipeInfrastructure(
+        NParallelPipes=20,
+        traceSegments=[hhe_segment],
+        pipeDistance=1.5,
+        burialDepth=1.2,
+    )
+    hhe_field = HHEGroundField(
+        pipe_infrastructure=pipe_infrastructure,
+        k_s=float(soil.thermalCondShallowHeating),
+        k_s_cooling=float(soil.thermalCondShallowCooling),
+    )
+
+    agg_load_input = read_aggregated_load_tsv(
+        _EXAMPLE_DIR / "data" / "silkeborg_hhe_aggregated_load_heat.dat"
+    )
+    heat_pumps = AggregatedHeatPumps(
+        load_input=agg_load_input,
+        brine=brine,
+        f_peak_heating=1.0,
+        f_peak_cooling=1.0,
+        peak_heating_h=4.0,
+        peak_cooling_h=4.0,
+    )
+
+    sizing = SizingParameters(time_horizon_years=30.0)
+
+    result = run_hhe_sizing_workflow(
+        heat_pumps=heat_pumps,
+        hhe_field=hhe_field,
+        pipe_infrastructure=pipe_infrastructure,
+        hydraulic=hydraulic,
+        brine=brine,
+        soil=soil,
+        sizing=sizing,
+        T_brine_min_heat=-3.0,
+        T_brine_max_cool=20.0,
+    )
+
+    return result
+
+
+# ===========================================================================
+# HHE thermal dimensioning tests
+# ===========================================================================
+
+class TestHHEThermalDimensioning:
+
+    def test_loop_length(self, hhe_dimensioning):
+        # sizing.L_m is the one-way pipe segment length;
+        # the printed "loop length" is 2 × L_m = 220.98 m.
+        result = hhe_dimensioning
+        L = result.sizing.L_m
+        assert abs(L - 110.49) < 0.5, (
+            f"HHE segment length {L:.2f} m deviates >0.5 m from 110.49 m"
+        )
+
+    def test_governing_mode_heating(self, hhe_dimensioning):
+        result = hhe_dimensioning
+        assert result.sizing.governing == "heating", (
+            f"Expected governing='heating', got '{result.sizing.governing}'"
+        )
+
+    def test_distribution_fraction_heating(self, hhe_dimensioning):
+        result = hhe_dimensioning
+        f = result.dist_thermal_heat.F_total
+        assert abs(f * 100 - 35.2) < 0.5, (
+            f"Dist. fraction (heating) = {f*100:.1f}% deviates >0.5% from 35.2%"
+        )
+
+    def test_hhe_pressure_drop_heating(self, hhe_dimensioning):
+        result = hhe_dimensioning
+        dp = result.hhe_dp_heat_Pa
+        assert abs(dp - 9_490) < 200, (
+            f"HHE ΔP (heating) = {dp:.0f} Pa deviates >200 Pa from 9,490 Pa"
+        )
+
+    def test_system_temperature_heating_annual(self, hhe_dimensioning):
+        result = hhe_dimensioning
+        T = result.T_avg_heat_annual_C
+        assert abs(T - 0.22) < 0.05, (
+            f"T_avg_heat_annual = {T:.2f}°C deviates >0.05°C from 0.22°C"
+        )
+
+    def test_system_temperature_heating_winter(self, hhe_dimensioning):
+        result = hhe_dimensioning
+        T = result.T_avg_heat_winter_C
+        assert abs(T - (-2.14)) < 0.05, (
+            f"T_avg_heat_winter = {T:.2f}°C deviates >0.05°C from -2.14°C"
+        )
+
+    def test_system_temperature_heating_peak(self, hhe_dimensioning):
+        result = hhe_dimensioning
+        T = result.T_avg_heat_peak_C
+        assert abs(T - (-4.50)) < 0.05, (
+            f"T_avg_heat_peak = {T:.2f}°C deviates >0.05°C from -4.50°C"
+        )
+
+    def test_no_cooling_results(self, hhe_dimensioning):
+        """Heat-only case should have no cooling sizing results."""
+        result = hhe_dimensioning
+        assert result.sizing.R_cooling_K_m_W is None
+        assert result.hhe_dp_cool_Pa is None
+        assert result.T_avg_cool_annual_C is None
