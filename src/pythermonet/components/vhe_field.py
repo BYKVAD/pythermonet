@@ -10,7 +10,7 @@ from ..core.annulus import Annulus
 from ..core.material import Material
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class VHEField:
     ID: int
     HE: str

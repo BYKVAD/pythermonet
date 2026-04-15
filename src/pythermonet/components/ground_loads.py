@@ -11,7 +11,7 @@ from pythermonet.system.diversity_factor import diversity_factor_from_n_heat_pum
 PeakSupplyMode = Literal["absolute", "incremental"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class GroundLoads:
     """
     Aggregated ground-side thermal loads and flow parameters.

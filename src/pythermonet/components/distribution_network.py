@@ -6,7 +6,7 @@ import numpy as np
 from pythermonet.components.pipe_infrastructure import PipeInfrastructure
 from pythermonet.core.material import Material
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DistributionNetwork:
     infrastructure: PipeInfrastructure
     trace_names: list[str]
