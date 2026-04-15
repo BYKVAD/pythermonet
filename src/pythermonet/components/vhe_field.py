@@ -1,142 +1,180 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Literal, Sequence, Optional
+from typing import Sequence, Any
 
-from pythermonet.core.pipe_segment import PipeSegment
-from pythermonet.core.annulus import Annulus
-from pythermonet.core.material import Material
+import numpy as np
+import pygfunction as gt
+from ..core.pipe_segment import PipeSegment
+from ..core.annulus import Annulus
+from ..core.material import Material
 
-HeatExchangerType = Literal["1U", "2U", "COAX"]
 
-
-@dataclass
+@dataclass(frozen=True, slots=True)
 class VHEField:
     ID: int
-    HE: HeatExchangerType                 # "1U", "2U", "COAX"
+    HE: str
+    pipe: PipeSegment
+    borehole: Annulus
+    grout: Material
+    coordinates: Sequence[Sequence[float]]
+    shankSpacing: float
 
-    pipe: PipeSegment                     # ét fysisk rør (geometri + materiale)
-    borehole: Annulus                     # borehul (evt. casing)
-    grout: Material                       # udfyldning mellem rør og borehul
+    H_m: float
+    D_m: float
+    use_z_as_depth: bool = False
+    tilt_rad: float = 0.0
+    orientation_rad: float = 0.0
 
-    coordinates: List[list]               # [[x, y, z], ...] (én pr. HE)
-    shankSpacing: float                   # m (kun relevant for 2U)
+    def __post_init__(self) -> None:
+        coords = np.asarray(self.coordinates, dtype=float)
 
-    # -----------------------------
-    # Pygfunction adapter
-    # -----------------------------
-    def to_pygfunction_boreholes(
-        self,
-        *,
-        H_m: float,
-        D_m: float = 0.0,
-        tilt_deg: float = 0.0,
-        orientation_deg: float = 0.0,
-        use_z_as_depth: bool = False,
-        r_b_m: Optional[float] = None,
-    ):
-        """
-        Returnerer en liste af pygfunction Borehole-objekter for borehole field layout.
+        if coords.ndim != 2:
+            raise ValueError("coordinates must be a 2D array-like structure.")
+        if coords.shape[0] == 0:
+            raise ValueError("VHEField must contain at least one borehole.")
+        if coords.shape[1] not in (2, 3):
+            raise ValueError("coordinates must have shape (n, 2) or (n, 3).")
 
-        Parametre
-        ---------
-        H_m:
-            Borehole-længde (m) (pygfunction: H).
-        D_m:
-            Dybde til borehole top (m) under terræn (pygfunction: D). Default 0.
-        tilt_deg, orientation_deg:
-            Borehole tilt/orientation (grader). Default 0 (vertikal).
-        use_z_as_depth:
-            Hvis True tolkes koordinatens z som "D" (dybde til top) pr borehole.
-            (Typisk: z=0 betyder terræn; z>0 nedad). Hvis z i stedet er kote/elevation,
-            så hold denne False og brug D_m.
-        r_b_m:
-            Overstyring af borehole-radius (m). Hvis None forsøges radius udledt af self.borehole.
+        if self.pipe is None:
+            raise ValueError("pipe must not be None.")
+        if self.borehole is None:
+            raise ValueError("borehole must not be None.")
+        if self.grout is None:
+            raise ValueError("grout must not be None.")
+        if self.shankSpacing <= 0.0:
+            raise ValueError("shankSpacing must be > 0.")
 
-        Bemærk
-        ------
-        - pygfunction bruger kun (x, y) til placering i plan.
-        - z håndteres kun, hvis du eksplicit beder om det via use_z_as_depth.
-        """
-        import math
+        if self.H_m <= 0.0:
+            raise ValueError("H_m must be > 0.")
+        if self.D_m < 0.0:
+            raise ValueError("D_m must be >= 0.")
 
-        # Lokal import for at holde afhængigheden isoleret
-        import pygfunction as gt
+        object.__setattr__(
+            self,
+            "coordinates",
+            tuple(tuple(float(v) for v in row) for row in coords),
+        )
+        object.__setattr__(self, "shankSpacing", float(self.shankSpacing))
+        object.__setattr__(self, "H_m", float(self.H_m))
+        object.__setattr__(self, "D_m", float(self.D_m))
+        object.__setattr__(self, "use_z_as_depth", bool(self.use_z_as_depth))
+        object.__setattr__(self, "tilt_rad", float(self.tilt_rad))
+        object.__setattr__(self, "orientation_rad", float(self.orientation_rad))
 
-        coords = self._validate_coordinates(self.coordinates)
+    @property
+    def ndim(self) -> int:
+        return len(self.coordinates[0])
 
-        # Borehole radius
-        r_b = r_b_m if r_b_m is not None else self._infer_borehole_radius_m()
+    @property
+    def n_boreholes(self) -> int:
+        return len(self.coordinates)
 
-        # Konverter grader til radianer som pygfunction forventer
-        tilt = math.radians(float(tilt_deg))
-        orientation = math.radians(float(orientation_deg))
+    @property
+    def x_m(self) -> tuple[float, ...]:
+        return tuple(row[0] for row in self.coordinates)
 
-        boreholes = []
-        for c in coords:
-            x, y, z = float(c[0]), float(c[1]), float(c[2])
+    @property
+    def y_m(self) -> tuple[float, ...]:
+        return tuple(row[1] for row in self.coordinates)
 
-            D = float(z) if use_z_as_depth else float(D_m)
+    @property
+    def z_m(self) -> tuple[float, ...] | None:
+        if self.ndim == 3:
+            return tuple(row[2] for row in self.coordinates)
+        return None
+
+    @property
+    def xy_m(self) -> tuple[tuple[float, float], ...]:
+        return tuple((row[0], row[1]) for row in self.coordinates)
+
+    @property
+    def r_b_m(self) -> float:
+        """Borehole radius [m], derived from borehole.outerDiameter."""
+        return float(self.borehole.outerDiameter) / 2.0
+
+    def to_pygfunction_boreholes(self) -> list[gt.boreholes.Borehole]:
+        xy = np.asarray(self.xy_m, dtype=float)
+        unique_xy = np.unique(xy, axis=0)
+        if len(unique_xy) != len(xy):
+            raise ValueError(
+                f"Duplicate borehole coordinates detected: "
+                f"{len(xy) - len(unique_xy)} duplicate(s)."
+            )
+
+        boreholes: list[gt.boreholes.Borehole] = []
+
+        for row in self.coordinates:
+            x = float(row[0])
+            y = float(row[1])
+
+            if self.use_z_as_depth:
+                if len(row) < 3:
+                    raise ValueError(
+                        "use_z_as_depth=True requires 3D coordinates [x, y, z]."
+                    )
+                D_use = float(row[2])
+            else:
+                D_use = self.D_m
 
             boreholes.append(
                 gt.boreholes.Borehole(
-                    H=float(H_m),
-                    D=D,
-                    r_b=float(r_b),
+                    H=self.H_m,
+                    D=D_use,
+                    r_b=self.r_b_m,
                     x=x,
                     y=y,
-                    tilt=tilt,
-                    orientation=orientation,
+                    tilt=self.tilt_rad,
+                    orientation=self.orientation_rad,
                 )
             )
 
         return boreholes
 
-    def boreholes_signature(self, *, H_m: float, D_m: float = 0.0, r_b_m: Optional[float] = None) -> str:
-        """
-        Stabil signatur til caching: layout + nøgleparametre.
-        (Bevidst enkel; kan udvides senere).
-        """
-        r_b = r_b_m if r_b_m is not None else self._infer_borehole_radius_m()
-        xy = [(float(c[0]), float(c[1])) for c in self._validate_coordinates(self.coordinates)]
-        return f"VHEField:{self.ID}|HE:{self.HE}|n:{len(xy)}|H:{float(H_m)}|D:{float(D_m)}|r_b:{float(r_b)}|xy:{xy}"
+    def compute_pygfunctions(
+        self,
+        times_s,
+        alpha_m2_s: float,
+        method: str = "equivalent",
+        boundary_condition: str = "UHTR",
+        options: dict | None = None,
+    ) -> np.ndarray:
+        times_arr = np.asarray(times_s, dtype=float).reshape(-1)
 
-    # -----------------------------
-    # Intern hjælp
-    # -----------------------------
-    @staticmethod
-    def _validate_coordinates(coords: Sequence[Sequence[float]]) -> List[List[float]]:
-        if not isinstance(coords, (list, tuple)) or len(coords) == 0:
-            raise ValueError("VHEField.coordinates skal være en ikke-tom liste af [x, y, z].")
+        if times_arr.size == 0:
+            raise ValueError("times_s must be non-empty.")
+        if np.any(times_arr <= 0.0):
+            raise ValueError("All times in times_s must be > 0.")
+        if alpha_m2_s <= 0.0:
+            raise ValueError("alpha_m2_s must be > 0.")
 
-        out: List[List[float]] = []
-        for i, c in enumerate(coords):
-            if not isinstance(c, (list, tuple)) or len(c) != 3:
-                raise ValueError(f"coordinates[{i}] skal have format [x, y, z]. Fik: {c}")
-            out.append([float(c[0]), float(c[1]), float(c[2])])
-        return out
+        boreholes = self.to_pygfunction_boreholes()
 
-    def _infer_borehole_radius_m(self) -> float:
-        """
-        Forsøger at udlede borehole radius (m) fra Annulus.
-        Du skal evt. justere felt-navn afhængigt af din Annulus-implementering.
+        gfunc = gt.gfunction.gFunction(
+            boreholes,
+            float(alpha_m2_s),
+            time=times_arr,
+            method=method,
+            boundary_condition=boundary_condition,
+            options=options or {},
+        )
 
-        Typiske navne:
-        - outerDiameter (m)
-        - OD (m)
-        - outer_diameter_m (m)
+        return np.asarray(gfunc.gFunc, dtype=float)
 
-        Fallback: kaster fejl, så radius eksplicit gives via r_b_m.
-        """
-        candidates = ["outerDiameter", "OD", "outer_diameter_m", "outer_diameter"]
-        for name in candidates:
-            if hasattr(self.borehole, name):
-                od = float(getattr(self.borehole, name))
-                if od <= 0:
-                    break
-                return 0.5 * od
+    def compute_gfunctions_from_soil(
+        self,
+        times_s,
+        soil,
+        method: str = "equivalent",
+        boundary_condition: str = "UHTR",
+        options: dict | None = None,
+    ) -> np.ndarray:
+        alpha_m2_s = float(soil.thermalCond) / (float(soil.rho) * float(soil.c))
 
-        raise ValueError(
-            "Kunne ikke udlede borehole radius fra VHEField.borehole (Annulus). "
-            "Angiv r_b_m eksplicit eller tilpas _infer_borehole_radius_m() til dine feltnavne."
+        return self.compute_gfunctions(
+            times_s=times_s,
+            alpha_m2_s=alpha_m2_s,
+            method=method,
+            boundary_condition=boundary_condition,
+            options=options,
         )

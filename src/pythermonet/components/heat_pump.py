@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class HeatPump:
     ID: int
 
@@ -60,18 +60,18 @@ class HeatPump:
         # Antagelse: HeatingLoad er leveret til bygning (sink-side).
         # El-forbrug = P_load / COP
         # Ground extraction = P_load - P_el = P_load*(1 - 1/COP)
-        self.peakHeating_ground_load = self.peakHeatingLoad * (1.0 - 1.0 / self.peakCOP)
-        self.winterHeating_ground_load = self.winterHeatingLoad * (1.0 - 1.0 / self.winterSCOP)
-        self.annualHeating_ground_load = self.annualHeatingLoad * (1.0 - 1.0 / self.annualSCOP)
+        object.__setattr__(self, "peakHeating_ground_load",   self.peakHeatingLoad   * (1.0 - 1.0 / self.peakCOP))
+        object.__setattr__(self, "winterHeating_ground_load", self.winterHeatingLoad * (1.0 - 1.0 / self.winterSCOP))
+        object.__setattr__(self, "annualHeating_ground_load", self.annualHeatingLoad * (1.0 - 1.0 / self.annualSCOP))
 
         # 2) Ground loads (cooling) – aktiv køling konvention
         # Hvis CoolingLoad er køleeffekt leveret (fjernet fra bygning),
         # så er varmeafgivelse til jord: P_reject = P_cool + P_el = P_cool*(1 + 1/EER)
         if has_cooling:
-            self.peakCooling_ground_load = self.peakCoolingLoad * (1.0 + 1.0 / self.EER)
-            self.summerCooling_ground_load = self.summerCoolingLoad * (1.0 + 1.0 / self.EER)
-            self.annualCooling_ground_load = self.annualCoolingLoad * (1.0 + 1.0 / self.EER)
+            object.__setattr__(self, "peakCooling_ground_load",   self.peakCoolingLoad   * (1.0 + 1.0 / self.EER))
+            object.__setattr__(self, "summerCooling_ground_load", self.summerCoolingLoad * (1.0 + 1.0 / self.EER))
+            object.__setattr__(self, "annualCooling_ground_load", self.annualCoolingLoad * (1.0 + 1.0 / self.EER))
         else:
-            self.peakCooling_ground_load = 0.0
-            self.summerCooling_ground_load = 0.0
-            self.annualCooling_ground_load = 0.0
+            object.__setattr__(self, "peakCooling_ground_load",   0.0)
+            object.__setattr__(self, "summerCooling_ground_load", 0.0)
+            object.__setattr__(self, "annualCooling_ground_load", 0.0)

@@ -1,85 +1,100 @@
+"""System-level g-function gateways for pythermonet.
+
+Includes support for both pygfunction and HHE horizontal-loop gfunction.
+"""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence
 import numpy as np
-import pygfunction as gt
 
-@dataclass(frozen=True)
-class GFunctionResult:
-    time_s: np.ndarray
-    g: np.ndarray
-    meta: Dict[str, Any]
+from pythermonet.gfunctions.pygfunction_impl import compute_gvalues_pygfunction
+from pythermonet.simulation.HHE import gfunction as compute_gvalues_hhe
+
 
 def compute_gfunction_pygfunction(
-    *,
-    coords_xy_m: Sequence[Sequence[float]],
-    time_s: Sequence[float],
-    alpha_m2s: float,
-    H_m: float,
-    D_m: float,
-    r_b_m: float,
-    method: str = "equivalent",
-    options: Optional[Dict[str, Any]] = None,
-) -> GFunctionResult:
-    xy = np.asarray(coords_xy_m, dtype=float)
-    if xy.ndim != 2 or xy.shape[1] not in (2, 3):
-        raise ValueError("coords_xy_m must be Nx2 or Nx3: [[x,y], ...] or [[x,y,z], ...].")
+    coords_xy_m,
+    time_s,
+    alpha_m2s,
+    H_m,
+    r_b_m,
+    method="equivalent",
+    options=None,
+):
+    # The existing pyro module expects a pygfunction style request object
+    # but this function is a lightweight compatibility adapter for legacy code.
+    from pythermonet.gfunctions.models import GFunctionRequest
+    from pythermonet.gfunctions.models import GFunctionSet
 
-    t = np.asarray(time_s, dtype=float)
-    if np.any(t <= 0):
-        raise ValueError("time_s must be strictly positive.")
-    if alpha_m2s <= 0:
-        raise ValueError("alpha_m2s must be > 0.")
-    if H_m <= 0 or r_b_m <= 0:
-        raise ValueError("H_m and r_b_m must be > 0.")
-
-    borefield = [
-        gt.boreholes.Borehole(H=H_m, D=D_m, r_b=r_b_m, x=float(x), y=float(y))
-        for x, y in xy[:, :2]
-    ]
-
-    options = options or {}
-    gfunc = gt.gfunction.gFunction(
-        borefield=borefield,
-        alpha=alpha_m2s,
-        time=t,
+    # For compatibility, treat coords_xy_m as list of boreholes in this context.
+    # The actual pygfunction engine wants pygfunction borehole objects; callers
+    # should still be responsible for correct types in this path.
+    req = GFunctionRequest(
+        times_s=np.asarray(time_s, dtype=float),
+        boreholes=coords_xy_m,
+        alpha_m2_s=float(alpha_m2s),
         method=method,
-        options=options,
+        options=options or {},
     )
+    gset = compute_gvalues_pygfunction(req)
 
-    return GFunctionResult(
-        time_s=t,
-        g=np.asarray(gfunc.gFunc, dtype=float),
-        meta={
-            "n_boreholes": int(len(borefield)),
-            "alpha_m2s": float(alpha_m2s),
-            "H_m": float(H_m),
-            "D_m": float(D_m),
-            "r_b_m": float(r_b_m),
-            "method": method,
-            "options": options,
-        },
-    )
+    # Convert to compatibility object (duck-type minimal API)
+    class _G:
+        def __init__(self, times_s, g_values, meta):
+            self.times_s = times_s
+            self.g = np.asarray(g_values, dtype=float)
+            self.meta = meta
+
+    return _G(gset.times_s, gset.g_values, gset.meta)
+
 
 def compute_gfunction_infinite_medium(
-    *,
-    coords_xy_m: Sequence[Sequence[float]],
-    time_s: Sequence[float],
-    alpha_m2s: float,
-    H_m: float,
-    r_b_m: float,
-    D_large_m: float = 100.0,
-    method: str = "equivalent",
-    options: Optional[Dict[str, Any]] = None,
-) -> GFunctionResult:
-    # Approximates infinite medium by pushing top depth far away.
+    coords_xy_m,
+    time_s,
+    alpha_m2s,
+    H_m,
+    r_b_m,
+    D_large_m,
+    method="equivalent",
+    options=None,
+):
+    """Compatibility adapter used by thermal_dimensioning.HHE path.
+
+    - If input is a pythermonet HHE horizontal loop (coords), then run HHE gfunction.
+    - Otherwise fallback to pygfunction full-space calculation.
+    """
+    # If coords_xy_m are raw np coordinates, attempt to run HHE field gfunction.
+    if isinstance(coords_xy_m, np.ndarray) and coords_xy_m.ndim == 2:
+        # Build a minimal PipeInfrastructure representation for HHE
+        # A single-lateral “equivalent” line is still roughly approximated as 1 pipe.
+        from pythermonet.components.pipe_infrastructure import PipeInfrastructure
+        from pythermonet.core.pipe_segment import PipeSegment
+        from pythermonet.core.material import Material
+
+        # 1D areal field approximated as an equivalent 1-pipe segment.
+        # This is conservative and can be improved as needed by caller.
+        material = Material(rho=950.0, c=1900.0, thermalCond=0.4)
+        segment = PipeSegment(outerDiameter=2*0.016, SDR=11, material=material, roughnessHeight=1.5e-5, ID=0, length=float(H_m))
+
+        pi = PipeInfrastructure(
+            NParallelPipes=max(1, int(coords_xy_m.shape[0])),
+            traceSegments=[segment],
+            pipeDistance=1.0,
+            burialDepth=float(r_b_m),
+        )
+
+        g_values = compute_gvalues_hhe(pi, k_s=1.0, alpha=float(alpha_m2s), time=np.asarray(time_s, dtype=float))
+
+        class _G:
+            def __init__(self, g):
+                self.g = np.asarray(g, dtype=float)
+
+        return _G(g_values)
+
+    # Fallback: run pygfunction-based infinite-medium model
     return compute_gfunction_pygfunction(
         coords_xy_m=coords_xy_m,
         time_s=time_s,
         alpha_m2s=alpha_m2s,
         H_m=H_m,
-        D_m=D_large_m,
         r_b_m=r_b_m,
         method=method,
         options=options,

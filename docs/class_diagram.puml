@@ -1,0 +1,339 @@
+@startuml pythermonetII
+
+skinparam classAttributeIconSize 0
+skinparam classFontSize 12
+skinparam groupInheritance 2
+hide empty members
+
+' ─────────────────────────────────────────
+' Core – Materials
+' ─────────────────────────────────────────
+package "core" {
+  class Material <<dataclass>> {
+    +rho: float
+    +c: float
+    +thermalCond: float
+  }
+
+  class HeatCarrier <<dataclass>> {
+    +dynamicViscosity: float
+  }
+
+  class Soil <<dataclass>> {
+    +thermalCondShallowHeating: float
+    +thermalCondShallowCooling: float
+    +Qgeo: float
+    +surfaceTemp: float
+    +surfaceTempAmp: float
+  }
+
+  class Climate <<dataclass>> {
+    +heatingDegreeDaysFractionWinter: float
+    +coolingDegreeDaysFractionSummer: float
+  }
+
+  class Annulus <<dataclass>> {
+    +outerDiameter: float
+    +SDR: float
+  }
+
+  class Pipe <<dataclass>> {
+    +roughnessHeight: float
+    +material: Material
+  }
+
+  class PipeSegment <<dataclass>> {
+    +ID: int
+    +length: float
+  }
+
+  Material <|-- HeatCarrier
+  Material <|-- Soil
+  Annulus <|-- Pipe
+  Pipe <|-- PipeSegment
+  Pipe *-- Material
+}
+
+' ─────────────────────────────────────────
+' Components
+' ─────────────────────────────────────────
+package "components" {
+  class HeatPump <<dataclass, frozen>> {
+    +ID: int
+    +annualHeatingLoad: float
+    +winterHeatingLoad: float
+    +peakHeatingLoad: float
+    +annualSCOP: float
+    +winterSCOP: float
+    +peakCOP: float
+    +deltaTHeating: float
+    +annualCoolingLoad: float
+    +summerCoolingLoad: float
+    +peakCoolingLoad: float
+    +EER: float
+    +deltaTCooling: float
+    --computed--
+    +annualHeating_ground_load: float
+    +winterHeating_ground_load: float
+    +peakHeating_ground_load: float
+    +annualCooling_ground_load: float
+    +summerCooling_ground_load: float
+    +peakCooling_ground_load: float
+  }
+
+  class GroundLoads <<dataclass, frozen>> {
+    +heating_ground_load_W: ndarray
+    +cooling_ground_load_W: ndarray
+    +has_cooling: bool
+    +peak_heating_h: float
+    +peak_cooling_h: float
+    +deltaT_sys_heat: float
+    +deltaT_sys_cool: float
+    +aggregated_mdot_peak_heat_kg_s: float
+    +aggregated_mdot_peak_cool_kg_s: float
+    ..factory..
+    +ground_loads_from_heat_pumps()
+    +ground_loads_from_district()
+  }
+
+  class PipeInfrastructure <<dataclass>> {
+    +NParallelPipes: int
+    +pipeDistance: float
+    +burialDepth: float
+    +traceSegments: List[PipeSegment]
+  }
+
+  class DistributionNetwork <<dataclass, frozen>> {
+    +trace_names: list[str]
+    +hp_id_trace: list[ndarray]
+    +max_pressure_loss_trace: ndarray
+    +SDR: ndarray
+    +L_traces: ndarray
+    +N_traces: ndarray
+    +globalMaterial: Material
+  }
+
+  class VHEField <<dataclass, frozen>> {
+    +ID: int
+    +HE: str
+    +shankSpacing: float
+    +H_m: float
+    +D_m: float
+    +coordinates: Sequence
+    --properties--
+    +n_boreholes: int
+    +r_b_m: float
+    --methods--
+    +to_pygfunction_boreholes()
+    +compute_gfunctions_from_soil()
+  }
+
+  GroundLoads "1" o-- "many" HeatPump
+  PipeInfrastructure *-- "many" PipeSegment
+  DistributionNetwork *-- PipeInfrastructure
+  VHEField *-- PipeSegment
+  VHEField *-- Annulus
+  VHEField *-- Material
+}
+
+' ─────────────────────────────────────────
+' Dimensioning
+' ─────────────────────────────────────────
+package "dimensioning" {
+  abstract class GroundField {
+    {abstract} +n_elements: int
+    {abstract} +T_undisturbed(L, soil): float
+    {abstract} +T_gradient(soil): float
+    {abstract} +compute_gfunction(L, times_s, alpha): ndarray
+    {abstract} +R_at_L(L, m_dot, brine, soil): float
+    {abstract} +R_simple(m_dot, brine, soil): float
+    {abstract} +ils_gfunction(times_s, alpha): ndarray
+    {abstract} +seasonal_amplitude(soil): float
+    {abstract} +k_s_eff(soil): float
+    +k_s_eff_heating(soil): float
+    +k_s_eff_cooling(soil): float
+  }
+
+  class BHEGroundField {
+    -_field: VHEField
+  }
+
+  class HHEGroundField {
+    -_pi: PipeInfrastructure
+    -_k_s: float
+    -_k_s_cooling: float
+    -_seg: PipeSegment
+  }
+
+  class SizingParameters <<dataclass, frozen>> {
+    +time_horizon_years: float
+    +times_s_peak_heating(peak_h): list
+    +times_s_peak_cooling(peak_h): list
+  }
+
+  class FieldSizingResult <<dataclass, frozen>> {
+    +L_m: float
+    +governing: str
+    +R_heating_K_m_W: float
+    +R_cooling_K_m_W: float
+  }
+
+  class HydraulicResult <<dataclass, frozen>> {
+    +outer_diameter: ndarray
+    +inner_diameter: ndarray
+    +governing_mode: ndarray
+    +m3_s_heating: ndarray
+    +m3_s_cooling: ndarray
+    +Re_heating: ndarray
+    +Re_cooling: ndarray
+    +dp_heating: ndarray
+    +dp_cooling: ndarray
+  }
+
+  class SystemBrineTemperatureResult <<dataclass, frozen>> {
+    +T_avg_heat_annual_C: float
+    +T_avg_heat_winter_C: float
+    +T_avg_heat_peak_C: float
+    +T_avg_cool_annual_C: float
+    +T_bhe_heat_annual_C: float
+    +T_bhe_heat_winter_C: float
+    +T_bhe_heat_peak_C: float
+    +V_bhe_m3: float
+    +V_dist_m3: float
+    +V_total_m3: float
+    +bhe_fraction: float
+  }
+
+  class BHEWorkflowResult <<dataclass, frozen>> {
+    +P_bhe_heating_W: ndarray
+    +P_bhe_cooling_W: ndarray
+    +P_full_heating_W: ndarray
+    +P_full_cooling_W: ndarray
+    +bhe_dp_heat_Pa: float
+    +bhe_dp_cool_Pa: float
+    ..factory..
+    +run_bhe_sizing_workflow()
+    +print_bhe_results()
+  }
+
+  class HHEWorkflowResult <<dataclass, frozen>> {
+    +T_hhe_heat_annual_C: float
+    +T_hhe_heat_winter_C: float
+    +T_hhe_heat_peak_C: float
+    +P_hhe_heating_W: ndarray
+    +P_hhe_cooling_W: ndarray
+    +P_full_heating_W: ndarray
+    +P_full_cooling_W: ndarray
+    +hhe_dp_heat_Pa: float
+    +hhe_dp_cool_Pa: float
+    ..factory..
+    +run_hhe_sizing_workflow()
+    +print_hhe_results()
+  }
+
+  GroundField <|-- BHEGroundField
+  GroundField <|-- HHEGroundField
+  BHEGroundField *-- VHEField
+  HHEGroundField *-- PipeInfrastructure
+
+  BHEWorkflowResult *-- FieldSizingResult
+  BHEWorkflowResult *-- SystemBrineTemperatureResult
+  BHEWorkflowResult *-- HydraulicResult
+  BHEWorkflowResult *-- HeatCarrier
+  HHEWorkflowResult *-- FieldSizingResult
+  HHEWorkflowResult *-- HydraulicResult
+  HHEWorkflowResult *-- HeatCarrier
+  HydraulicResult --> DistributionNetwork
+}
+
+' ─────────────────────────────────────────
+' GFunctions
+' ─────────────────────────────────────────
+package "gfunctions" {
+  class GFunctionRequest <<dataclass, frozen>> {
+    +times_s: ndarray
+    +boreholes: Any
+    +alpha_m2_s: float
+    +method: str
+    +boundary_condition: str
+    +options: dict
+  }
+
+  class GFunctionSet <<dataclass>> {
+    +times_s: ndarray
+    +g_values: ndarray
+    +meta: dict
+  }
+
+  class GFunctionsService {
+    -cache: optional
+    +compute(req): GFunctionSet
+  }
+
+  GFunctionsService --> GFunctionRequest : uses
+  GFunctionsService --> GFunctionSet : returns
+}
+
+' ─────────────────────────────────────────
+' Physics
+' ─────────────────────────────────────────
+package "physics" {
+  class BHEResistanceResult <<dataclass, frozen>> {
+    +Rb_K_m_W: float
+    +Re: float
+    +Pr: float
+    +Q_m3_s: float
+    +v_m_s: float
+    +r_b_m: float
+    +r_p_m: float
+    +r_i_m: float
+    +s_m: float
+    +used_flow_length_correction: bool
+  }
+}
+
+' ─────────────────────────────────────────
+' Simulation
+' ─────────────────────────────────────────
+package "simulation" {
+  class PipeGroup <<dataclass, frozen>> {
+    +ID: int
+    +L_m: float
+    +Di_m: float
+    +Do_m: float
+    +Re: float
+    +k_pipe_W_mK: float
+    +burial_depth_m: float
+    +n_parallel_pipes: int
+    +n_traces: int
+    +pipe_spacing_m: float
+  }
+
+  class ModeInput <<dataclass, frozen>> {
+    +times_s: ndarray
+    +powers_W: ndarray
+    +Ti_C: float
+    +To_C: float
+  }
+
+  class ModeResult <<dataclass, frozen>> {
+    +T_dimv_C: ndarray
+    +F_total: float
+    +F_per_group: ndarray
+  }
+
+  class DistributionPipeModel <<dataclass, frozen>> {
+    +T0_C: float
+    +surface_amp_C: float
+    +pipe_groups: list[PipeGroup]
+    +heating: ModeInput
+    +cooling: ModeInput
+  }
+
+  DistributionPipeModel *-- HeatCarrier
+  DistributionPipeModel *-- Soil
+  DistributionPipeModel *-- "many" PipeGroup
+  DistributionPipeModel *-- ModeInput
+}
+
+@enduml

@@ -6,7 +6,7 @@ import numpy as np
 from pythermonet.components.pipe_infrastructure import PipeInfrastructure
 from pythermonet.core.material import Material
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class DistributionNetwork:
     infrastructure: PipeInfrastructure
     trace_names: list[str]
@@ -17,15 +17,6 @@ class DistributionNetwork:
     N_traces: np.ndarray
 
     globalMaterial: Material | None = None  # sættes automatisk
-
-    # outputs...
-    dimensioned_pipe_diameter_heating: np.ndarray | None = None
-    dimensioned_pipe_inner_diameter_heating: np.ndarray | None = None
-    dimensioned_pipe_reynolds_number_heating: np.ndarray | None = None
-    dimensioned_pipe_diameter_cooling: np.ndarray | None = None
-    dimensioned_pipe_inner_diameter_cooling: np.ndarray | None = None
-    dimensioned_pipe_reynolds_number_cooling: np.ndarray | None = None
-    V_brine: float | None = None
 
     def __post_init__(self) -> None:
         segments = self.infrastructure.traceSegments
@@ -46,4 +37,4 @@ class DistributionNetwork:
                 )
 
         # sæt globalMaterial til første
-        self.globalMaterial = first
+        object.__setattr__(self, "globalMaterial", first)
