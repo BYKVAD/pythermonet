@@ -9,3 +9,7 @@ __pycache__/
 # virtual environments
 .venv/
 build/
+.claude/
+.vscode/
+
+out/
