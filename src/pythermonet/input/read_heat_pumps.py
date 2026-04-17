@@ -57,12 +57,7 @@ def _has_meaningful_cooling(df: pd.DataFrame) -> bool:
 # antager: HeatPump, _REQUIRED_COLS, _has_meaningful_cooling er defineret i samme modul
 
 
-def read_heat_pumps_tsv(path: str | Path) -> list[HeatPump]:
-    p = Path(path)
-    if not p.exists():
-        raise FileNotFoundError(f"Heat pump TSV not found: {p}")
-
-    df = pd.read_csv(p, sep=r"\t+", engine="python")
+def read_heat_pumps_tsv(df: pd.DataFrame) -> list[HeatPump]:
     df.columns = [c.strip() for c in df.columns]
 
     missing = [c for c in _REQUIRED_COLS if c not in df.columns]

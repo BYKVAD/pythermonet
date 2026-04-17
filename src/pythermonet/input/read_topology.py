@@ -37,7 +37,7 @@ def _parse_hp_id_vector(cell: str) -> np.ndarray:
 
 
 def read_undimensioned_topology_tsv_to_network(
-    path: str | Path,
+    df: pd.DataFrame,
     *,
     pipe_material: Material,
     roughness_height: float,
@@ -52,11 +52,7 @@ def read_undimensioned_topology_tsv_to_network(
       (diameter sættes senere af pipe-dimensionering).
     - Topologi/dimensioneringsfelter lagres på DistributionNetwork.
     """
-    p = Path(path)
-    if not p.exists():
-        raise FileNotFoundError(f"Topology TSV not found: {p}")
 
-    df = pd.read_csv(p, sep=r"\t+", engine="python")
     df.columns = [c.strip() for c in df.columns]
 
     missing = [c for c in _REQUIRED_COLS if c not in df.columns]
