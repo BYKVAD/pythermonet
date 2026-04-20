@@ -514,7 +514,20 @@ from pythermonet.dimensioning.ground_field import GroundField  # noqa: E402
 
 @dataclass(frozen=True)
 class FieldSizingResult:
-    """Result from the generic ground-field sizing solver."""
+    """
+    Result from the generic ground-field sizing solver.
+
+    Fields
+    ------
+    L_m : float
+        Required element length [m]
+    governing : str
+        "Heating" or "cooling"
+    R_heating_K_m_W : float
+        Effective thermal resistance at L_n (heating flow)
+    R_cooling_K_m_W : float
+        Effective thermal resistance at L_n (cooling flow)
+    """
     L_m: float                   # Required element length [m]
     governing: str               # "heating" or "cooling"
     R_heating_K_m_W: float       # Effective thermal resistance at L_m, heating flow

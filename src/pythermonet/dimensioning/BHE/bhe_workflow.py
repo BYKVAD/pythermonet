@@ -31,10 +31,10 @@ from pythermonet.simulation.run_distribution_pipe_thermal_model import (
 class BHEWorkflowResult:
     sizing: FieldSizingResult
     sys_temps: SystemBrineTemperatureResult
-    P_bhe_heating_W: np.ndarray
-    P_bhe_cooling_W: np.ndarray | None
-    P_full_heating_W: np.ndarray
-    P_full_cooling_W: np.ndarray | None
+    P_bhe_heating_W: np.ndarray # Varmelast-vektor på boringerne i Watt (årtier,vinter,spids)
+    P_bhe_cooling_W: np.ndarray | None # Kølelast-vektor på boringerne i Watt (årtier,vinter,spids)
+    P_full_heating_W: np.ndarray # Bygningens fulde varmeeffektbehov-vektor i Watt (årtier,vinter,spids)
+    P_full_cooling_W: np.ndarray | None # Bygningens fulde køleeffektbehov-vektor i Watt (årtier,vinter,spids)
     dist_thermal_heat: DistModeResult
     dist_thermal_cool: DistModeResult | None
     hydraulic: HydraulicResult
