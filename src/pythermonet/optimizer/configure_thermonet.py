@@ -15,7 +15,7 @@ from pythermonet.components.vhe_field import VHEField
 from pythermonet.core.annulus import Annulus
 from pythermonet.core.pipe_segment import PipeSegment
 
-from pythermonet.dimensioning.BHE.bhe_workflow import run_bhe_sizing_workflow, print_bhe_results
+from pythermonet.dimensioning.BHE.bhe_workflow import run_bhe_sizing_workflow, print_bhe_results, BHEWorkflowResult
 from pythermonet.dimensioning.sizing_parameters import SizingParameters
 
 
@@ -26,12 +26,10 @@ from typing import List
 
 
 
-def _calc_yearly_electricity_demand(heat_pump_settings: HeatPump) -> int:
-    loads_yearly_heating = heat_pump_settings.annualHeatingLoad
-    loads_yearly_cooling = heat_pump_settings.annualCoolingLoad
+def _calc_yearly_electricity_demand(loads: BHEWorkflowResult) -> int:
 
-    total_watt_heating = sum(loads_yearly_heating)
-    total_watt_cooling = sum(loads_yearly_cooling)
+    total_watt_heating = 0 if loads.P_full_heating_W is None else loads.P_full_heating_W[0]
+    total_watt_cooling = 0 if loads.P_full_cooling_W is None else loads.P_full_cooling_W[0]
 
     total_watt = total_watt_heating-total_watt_cooling
 
@@ -189,8 +187,9 @@ def execute_dimensioning():#pipe_catalogue: List[Annulus], ):
         T_brine_min_heat=T_BRINE_MIN_HEAT,
         T_brine_max_cool=T_BRINE_MAX_COOL,
     )
-    print_bhe_results(result)
 
+    mwh = _calc_yearly_electricity_demand(result)
 
+    return {"source_length": result.sizing.L_m, "elec_consump": mwh}
 
-execute_dimensioning()
+    

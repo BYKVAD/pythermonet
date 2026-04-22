@@ -9,5 +9,5 @@ def df_from_csv(path: Path | str, sep: str = ';') -> pd.DataFrame:
     if not p.exists():
         raise FileNotFoundError(f"Pipe catalogue not found: {p}")
 
-    df = pd.read_csv(p, sep=sep)
+    df = pd.read_csv(p, sep=sep, engine="python")
     return df
