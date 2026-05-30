@@ -1,5 +1,14 @@
 # setup.ps1
 # Automated environment setup for pythermonetII (Windows PowerShell)
+# Usage: .\setup.ps1                        — production install (core deps only)
+#        .\setup.ps1 -Dev                   — dev install (pinned versions from requirements.lock, includes matplotlib)
+#        .\setup.ps1 -VenvPath my_venv      — use a custom venv name/path
+#        .\setup.ps1 -Dev -VenvPath my_venv — both
+
+param(
+    [switch]$Dev,
+    [string]$VenvPath = ".venv"
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -34,39 +43,41 @@ if ($null -eq $pythonCmd) {
 }
 
 # 2) Create venv if missing
-if (!(Test-Path ".\.venv")) {
-    Write-Host "Creating virtual environment: .venv"
-    & $pythonCmd -m venv .venv
+if (!(Test-Path $VenvPath)) {
+    Write-Host "Creating virtual environment: $VenvPath"
+    & $pythonCmd -m venv $VenvPath
 } else {
-    Write-Host "Virtual environment exists: .venv"
+    Write-Host "Virtual environment exists: $VenvPath"
 }
 
 # 3) Ensure activation script exists
-if (!(Test-Path ".\.venv\Scripts\Activate.ps1")) {
-  Write-Error "Activate.ps1 not found. The venv may be corrupted. Delete .venv and rerun."
+if (!(Test-Path "$VenvPath\Scripts\Activate.ps1")) {
+  Write-Error "Activate.ps1 not found in $VenvPath. The venv may be corrupted. Delete it and rerun."
   exit 1
 }
 
 # 4) Activate venv
 Write-Host "Activating venv..."
-& .\.venv\Scripts\Activate.ps1
+& "$VenvPath\Scripts\Activate.ps1"
 
 # 5) Upgrade pip tooling
 Write-Host "Upgrading pip/setuptools/wheel..."
 python -m pip install --upgrade pip setuptools wheel
 
-# 6) Install requirements
-if (!(Test-Path ".\requirements.txt")) {
-  Write-Error "requirements.txt not found in project root."
-  exit 1
+# 6) Install dependencies and local package
+if ($Dev) {
+    if (!(Test-Path ".\requirements.lock")) {
+        Write-Error "requirements.lock not found. Generate it first with: pip-compile --extra dev -o requirements.lock pyproject.toml"
+        exit 1
+    }
+    Write-Host "Installing pinned dev dependencies from requirements.lock..."
+    pip install -r .\requirements.lock
+    Write-Host "Installing pythermonet (editable, no dep resolution)..."
+    pip install -e . --no-deps
+} else {
+    Write-Host "Installing pythermonet (editable)..."
+    pip install -e .
 }
-
-Write-Host "Installing requirements..."
-pip install -r .\requirements.txt
-
-# 7) Install local package
-Write-Host "Installing pythermonet (editable)..."
-pip install -e .
 
 # 8) Sanity check
 Write-Host "Sanity check:"
