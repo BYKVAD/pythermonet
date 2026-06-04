@@ -44,13 +44,13 @@ ALPHA  = 1.0e-6   # m2/s  soil thermal diffusivity
 K_S    = 2.0      # W/m/K soil thermal conductivity
 DEPTH  = 1.5      # m     burial depth
 R_PIPE = 0.016    # m     pipe outer radius (32mm OD)
-HDPE   = Material(rho=950, c=1900, thermalCond=0.4)
+HDPE   = Material(density=950, specific_heat=1900, thermal_conductivity=0.4)
 
 
 def make_segment(length: float, seg_id: int = 0) -> PipeSegment:
     return PipeSegment(
-        outerDiameter=2 * R_PIPE,
-        SDR=11,
+        outer_diameter=2 * R_PIPE,
+        sdr=11,
         material=HDPE,
         roughnessHeight=1.5e-5,
         ID=seg_id,

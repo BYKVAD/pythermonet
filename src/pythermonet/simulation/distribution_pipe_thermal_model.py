@@ -132,14 +132,14 @@ def _prandtl(brine: HeatCarrier) -> float:
     """
     Pr = mu * cp / k
     """
-    return float(brine.dynamicViscosity * brine.c / brine.thermalCond)
+    return float(brine.dynamic_viscosity * brine.specific_heat / brine.thermal_conductivity)
 
 
 def _shallow_k(soil: Soil, mode: str) -> float:
     if mode == "heating":
-        k = float(soil.thermalCondShallowHeating)
+        k = float(soil.thermal_conductivity_shallow_heating)
     elif mode == "cooling":
-        k = float(soil.thermalCondShallowCooling)
+        k = float(soil.thermal_conductivity_shallow_cooling)
     else:
         raise ValueError("mode must be 'heating' or 'cooling'")
 
@@ -154,11 +154,11 @@ def _soil_diffusivity_shallow(soil: Soil, mode: str) -> float:
     a = k / (rho * cp)
     """
     k = _shallow_k(soil, mode)
-    rho = float(soil.rho)
-    cp = float(soil.c)
+    rho = float(soil.density)
+    cp = float(soil.specific_heat)
 
     if rho <= 0 or cp <= 0:
-        raise ValueError(f"Soil rho and c must be > 0. Got rho={rho}, c={cp}.")
+        raise ValueError(f"Soil density and specific_heat must be > 0. Got density={rho}, specific_heat={cp}.")
 
     return float(k / (rho * cp))
 
@@ -289,7 +289,7 @@ def _compute_mode(
             Do=float(pg.Do_m),
             Re=float(pg.Re),
             Pr=float(Pr),
-            k_fluid=float(model.brine.thermalCond),
+            k_fluid=float(model.brine.thermal_conductivity),
             k_pipe=float(pg.k_pipe_W_mK),
         )
 

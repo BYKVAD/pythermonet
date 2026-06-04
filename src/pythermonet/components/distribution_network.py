@@ -12,7 +12,7 @@ class DistributionNetwork:
     trace_names: list[str]
     hp_id_trace: list[np.ndarray]
     max_pressure_loss_trace: np.ndarray
-    SDR: np.ndarray
+    sdr: np.ndarray
     L_traces: np.ndarray
     N_traces: np.ndarray
 
@@ -25,13 +25,13 @@ class DistributionNetwork:
             raise ValueError("No traceSegments in infrastructure.")
 
         first = segments[0].material
-        k0 = first.thermalCond
-        rho0 = first.rho  # eller hvad din anden property hedder
-        c0 = first.c
+        k0 = first.thermal_conductivity
+        rho0 = first.density  # eller hvad din anden property hedder
+        c0 = first.specific_heat
 
         for seg in segments[1:]:
             mat = seg.material
-            if mat.thermalCond != k0 or mat.rho != rho0 or mat.c != c0:
+            if mat.thermal_conductivity != k0 or mat.density != rho0 or mat.specific_heat != c0:
                 raise ValueError(
                     "All pipe materials must have identical thermal properties."
                 )

@@ -38,7 +38,7 @@ def load_project_inputs(
 ) -> ProjectInputs:
     pipe_catalogue = read_pipe_catalogue(pipe_catalogue_file)
     d_pipes_m = np.asarray(
-        sorted({a.outerDiameter for a in pipe_catalogue}),
+        sorted({a.outer_diameter for a in pipe_catalogue}),
         dtype=float,
     )
 

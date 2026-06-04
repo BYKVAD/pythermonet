@@ -56,7 +56,7 @@ class GroundField(ABC):
         """
         Rate of change of T_undisturbed with respect to L [K/m].
 
-        BHE: Qgeo / (2 * k_s).
+        BHE: geothermal_heat_flux / (2 * k_s).
         HHE: 0.0.
         """
 
@@ -100,7 +100,7 @@ class GroundField(ABC):
         sizing: subtract for heating (cold winter), add for cooling (hot summer).
 
         BHE: 0.0 — the seasonal signal is fully attenuated at borehole depth.
-        HHE: A(D) = surfaceTempAmp · exp(−D/δ),  δ = √(2α/ω).
+        HHE: A(D) = surface_temperature_amplitude · exp(−D/δ),  δ = √(2α/ω).
         """
 
     @abstractmethod
@@ -109,7 +109,7 @@ class GroundField(ABC):
         Effective soil thermal conductivity [W/m/K] consistent with the
         g-function used by this field.
 
-        BHE: deep conductivity (soil.thermalCond) — same value used by pygfunction.
+        BHE: deep conductivity (soil.thermal_conductivity) — same value used by pygfunction.
         HHE: shallow conductivity supplied at construction — same value used by HHEGFunction.
         Must match the k_s baked into compute_gfunction / ils_gfunction so that
         ΔT = q · g / (2π · k_s) is dimensionally consistent.
@@ -120,7 +120,7 @@ class GroundField(ABC):
         Effective soil thermal conductivity for heating-mode sizing [W/m/K].
 
         BHE: equals k_s_eff (deep, isotropic).
-        HHE: shallow heating conductivity (soil.thermalCondShallowHeating).
+        HHE: shallow heating conductivity (soil.thermal_conductivity_shallow_heating).
         Default implementation delegates to k_s_eff; override for mode-specific values.
         """
         return self.k_s_eff(soil)
@@ -130,7 +130,7 @@ class GroundField(ABC):
         Effective soil thermal conductivity for cooling-mode sizing [W/m/K].
 
         BHE: equals k_s_eff (deep, isotropic).
-        HHE: shallow cooling conductivity (soil.thermalCondShallowCooling).
+        HHE: shallow cooling conductivity (soil.thermal_conductivity_shallow_cooling).
         Default implementation delegates to k_s_eff; override for mode-specific values.
         """
         return self.k_s_eff(soil)
@@ -152,10 +152,10 @@ class BHEGroundField(GroundField):
         return self._field.n_boreholes
 
     def T_undisturbed(self, L: float, soil: Soil) -> float:
-        return float(soil.surfaceTemp) + float(soil.Qgeo) * L / (2.0 * float(soil.thermalCond))
+        return float(soil.surface_temperature) + float(soil.geothermal_heat_flux) * L / (2.0 * float(soil.thermal_conductivity))
 
     def T_gradient(self, soil: Soil) -> float:
-        return float(soil.Qgeo) / (2.0 * float(soil.thermalCond))
+        return float(soil.geothermal_heat_flux) / (2.0 * float(soil.thermal_conductivity))
 
     def compute_gfunction(self, L: float, times_s: np.ndarray, alpha: float) -> np.ndarray:
         return replace(self._field, H_m=L).compute_pygfunctions(
@@ -180,7 +180,7 @@ class BHEGroundField(GroundField):
         return 0.0
 
     def k_s_eff(self, soil: Soil) -> float:
-        return float(soil.thermalCond)
+        return float(soil.thermal_conductivity)
 
     def ils_gfunction(self, times_s: np.ndarray, alpha: float) -> np.ndarray:
         r_b = float(self._field.r_b_m)
@@ -218,11 +218,11 @@ class HHEGroundField(GroundField):
         bisection evaluation; all other properties are preserved.
     k_s : float
         Shallow soil thermal conductivity for heating mode [W/m/K]
-        (soil.thermalCondShallowHeating). Used for the g-function and
+        (soil.thermal_conductivity_shallow_heating). Used for the g-function and
         the seasonal amplitude in heating mode.
     k_s_cooling : float, optional
         Shallow soil thermal conductivity for cooling mode [W/m/K]
-        (soil.thermalCondShallowCooling). Defaults to ``k_s`` when not
+        (soil.thermal_conductivity_shallow_cooling). Defaults to ``k_s`` when not
         provided (i.e. same conductivity for both modes).
     """
 
@@ -250,15 +250,15 @@ class HHEGroundField(GroundField):
     def T_undisturbed(self, L: float, soil: Soil) -> float:
         # Horizontal pipe: undisturbed temperature at burial depth, no L dependence
         D = float(self._pi.burialDepth)
-        return float(soil.surfaceTemp) + float(soil.Qgeo) * D / (2.0 * float(soil.thermalCond))
+        return float(soil.surface_temperature) + float(soil.geothermal_heat_flux) * D / (2.0 * float(soil.thermal_conductivity))
 
     def T_gradient(self, soil: Soil) -> float:
         return 0.0
 
     def compute_gfunction(self, L: float, times_s: np.ndarray, alpha: float) -> np.ndarray:
         new_seg = PipeSegment(
-            outerDiameter=self._seg.outerDiameter,
-            SDR=self._seg.SDR,
+            outer_diameter=self._seg.outer_diameter,
+            sdr=self._seg.sdr,
             material=self._seg.material,
             roughnessHeight=self._seg.roughnessHeight,
             ID=self._seg.ID,
@@ -280,33 +280,33 @@ class HHEGroundField(GroundField):
 
     def _r_pipe(self, m_dot: float, brine: HeatCarrier) -> float:
         """Pipe thermal resistance per unit length [K·m/W]: wall + convective."""
-        Do = float(self._seg.outerDiameter)
-        Di = Do * (1.0 - 2.0 / float(self._seg.SDR))
-        k_pipe = float(self._seg.material.thermalCond)
+        Do = float(self._seg.outer_diameter)
+        Di = Do * (1.0 - 2.0 / float(self._seg.sdr))
+        k_pipe = float(self._seg.material.thermal_conductivity)
 
-        v = m_dot / (brine.rho * math.pi * Di ** 2 / 4.0)
-        Re = float(reynolds_number(brine.rho, brine.dynamicViscosity, v, Di))
+        v = m_dot / (brine.density * math.pi * Di ** 2 / 4.0)
+        Re = float(reynolds_number(brine.density, brine.dynamic_viscosity, v, Di))
 
         if Re < 2300.0:
             Nu = 4.36  # laminar, constant heat flux
         else:
-            Pr = brine.c * brine.dynamicViscosity / brine.thermalCond
+            Pr = brine.specific_heat * brine.dynamic_viscosity / brine.thermal_conductivity
             f = float(darcy_friction_factor_beier(Re))
             Nu = (f / 8.0) * (Re - 1000.0) * Pr / (
                 1.0 + 12.7 * math.sqrt(f / 8.0) * (Pr ** (2.0 / 3.0) - 1.0)
             )
 
-        h = Nu * brine.thermalCond / Di
+        h = Nu * brine.thermal_conductivity / Di
         R_conv = 1.0 / (h * math.pi * Di)
         R_wall = math.log(Do / Di) / (2.0 * math.pi * k_pipe)
         return R_conv + R_wall
 
     def seasonal_amplitude(self, soil: Soil) -> float:
-        alpha = self._k_s / (float(soil.rho) * float(soil.c))
+        alpha = self._k_s / (float(soil.density) * float(soil.specific_heat))
         omega = 2.0 * math.pi / (365.25 * 24.0 * 3600.0)
         delta = math.sqrt(2.0 * alpha / omega)
         D = float(self._pi.burialDepth)
-        return float(soil.surfaceTempAmp) * math.exp(-D / delta)
+        return float(soil.surface_temperature_amplitude) * math.exp(-D / delta)
 
     def k_s_eff(self, soil: Soil) -> float:
         return self._k_s
@@ -319,7 +319,7 @@ class HHEGroundField(GroundField):
 
     def ils_gfunction(self, times_s: np.ndarray, alpha: float) -> np.ndarray:
         """ILS g averaged over N parallel horizontal pipes at lateral spacing d."""
-        r_pipe = float(self._seg.outerDiameter) / 2.0
+        r_pipe = float(self._seg.outer_diameter) / 2.0
         N = self._pi.NParallelPipes
         d = float(self._pi.pipeDistance or 0.0)
         TWO_PI = 2.0 * math.pi

@@ -29,27 +29,27 @@ topology_file  = PROJECT_DIR / "data/silkeborg_hhe_topology_dimensioned.dat"
 # 1) Define materials, brine, soil
 # -----------------------------------------------------------------------------
 pipe_material_dist = Material(
-    rho=975,
-    c=1900,
-    thermalCond=0.4,
+    density=975,
+    specific_heat=1900,
+    thermal_conductivity=0.4,
 )
 
 brine = HeatCarrier(
-    rho=965,
-    c=4450,
-    thermalCond=0.45,
-    dynamicViscosity=5e-3,
+    density=965,
+    specific_heat=4450,
+    thermal_conductivity=0.45,
+    dynamic_viscosity=5e-3,
 )
 
 soil = Soil(
-    rho=2500,
-    c=1000,
-    thermalCond=1.25,
-    thermalCondShallowHeating=1.25,
-    thermalCondShallowCooling=1.25,
-    Qgeo=0.0185,
-    surfaceTemp=9.03,
-    surfaceTempAmp=7.9,
+    density=2500,
+    specific_heat=1000,
+    thermal_conductivity=1.25,
+    thermal_conductivity_shallow_heating=1.25,
+    thermal_conductivity_shallow_cooling=1.25,
+    geothermal_heat_flux=0.0185,
+    surface_temperature=9.03,
+    surface_temperature_amplitude=7.9,
 )
 
 # -----------------------------------------------------------------------------
@@ -70,8 +70,8 @@ _, hydraulic = read_dimensioned_topology_tsv_to_hydraulic(
 hhe_pipe_material = pipe_material_dist
 
 hhe_segment = PipeSegment(
-    outerDiameter=0.040,    # 40 mm OD
-    SDR=17.0,
+    outer_diameter=0.040,   # 40 mm OD
+    sdr=17.0,
     material=hhe_pipe_material,
     roughnessHeight=1e-6,
     ID=0,
@@ -87,8 +87,8 @@ pipe_infrastructure = PipeInfrastructure(
 
 hhe_field = HHEGroundField(
     pipe_infrastructure=pipe_infrastructure,
-    k_s=float(soil.thermalCondShallowHeating),
-    k_s_cooling=float(soil.thermalCondShallowCooling),
+    k_s=float(soil.thermal_conductivity_shallow_heating),
+    k_s_cooling=float(soil.thermal_conductivity_shallow_cooling),
 )
 
 # -----------------------------------------------------------------------------

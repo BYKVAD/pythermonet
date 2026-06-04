@@ -43,8 +43,8 @@ def read_pipe_catalogue(path: str | Path) -> List[Annulus]:
     for _, r in df.iterrows():
         catalogue.append(
             Annulus(
-                outerDiameter=float(r["outer_diameter_mm"]) / 1000.0,
-                SDR=float(r["standard_dimension_ratio"]),
+                outer_diameter=float(r["outer_diameter_mm"]) / 1000.0,
+                sdr=float(r["standard_dimension_ratio"]),
             )
         )
 

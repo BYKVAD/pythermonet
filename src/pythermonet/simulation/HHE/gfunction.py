@@ -86,7 +86,7 @@ class HHEGFunction:
         self._depth = float(pipe_infrastructure.burialDepth)
         self._pipe_dist = float(pipe_infrastructure.pipeDistance or 0.0)
         self._trace = pipe_infrastructure.traceSegments
-        self._r_pipe = float(self._trace[0].outerDiameter / 2.0) if self._trace[0].outerDiameter is not None else 0.0
+        self._r_pipe = float(self._trace[0].outer_diameter / 2.0) if self._trace[0].outer_diameter is not None else 0.0
 
         if time is not None:
             t = np.asarray(time, dtype=float)

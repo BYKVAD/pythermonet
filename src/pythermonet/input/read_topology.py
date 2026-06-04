@@ -48,7 +48,7 @@ def read_undimensioned_topology_tsv_to_network(
     """
     Læser undimensioneret topologi og bygger et samlet DistributionNetwork.
 
-    - PipeInfrastructure.traceSegments oprettes med outerDiameter=np.nan
+    - PipeInfrastructure.traceSegments oprettes med outer_diameter=np.nan
       (diameter sættes senere af pipe-dimensionering).
     - Topologi/dimensioneringsfelter lagres på DistributionNetwork.
     """
@@ -65,7 +65,7 @@ def read_undimensioned_topology_tsv_to_network(
 
     # Parse arrays
     trace_names = df["Section"].astype(str).str.strip().to_list()
-    SDR = df["SDR"].astype(float).to_numpy()
+    sdr = df["SDR"].astype(float).to_numpy()
     L_traces = df["Trace_(m)"].astype(float).to_numpy()
     N_traces = df["Number_of_traces"].astype(int).to_numpy()
     max_pressure_loss_trace = df["Max_pressure_loss_(Pa)"].astype(float).to_numpy()
@@ -77,8 +77,8 @@ def read_undimensioned_topology_tsv_to_network(
     trace_segments: list[PipeSegment] = []
     for i in range(len(df)):
         seg = PipeSegment(
-            outerDiameter=np.nan,          # udfyldes efter dimensionering
-            SDR=float(SDR[i]),
+            outer_diameter=np.nan,          # udfyldes efter dimensionering
+            sdr=float(sdr[i]),
             material=pipe_material,
             roughnessHeight=float(roughness_height),
             ID=int(i),
@@ -98,7 +98,7 @@ def read_undimensioned_topology_tsv_to_network(
         trace_names=trace_names,
         hp_id_trace=hp_id_trace,
         max_pressure_loss_trace=max_pressure_loss_trace,
-        SDR=SDR,
+        sdr=sdr,
         L_traces=L_traces,
         N_traces=N_traces,
     )

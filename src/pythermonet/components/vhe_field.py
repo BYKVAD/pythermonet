@@ -90,8 +90,8 @@ class VHEField:
 
     @property
     def r_b_m(self) -> float:
-        """Borehole radius [m], derived from borehole.outerDiameter."""
-        return float(self.borehole.outerDiameter) / 2.0
+        """Borehole radius [m], derived from borehole.outer_diameter."""
+        return float(self.borehole.outer_diameter) / 2.0
 
     def to_pygfunction_boreholes(self) -> list[gt.boreholes.Borehole]:
         xy = np.asarray(self.xy_m, dtype=float)
@@ -169,7 +169,7 @@ class VHEField:
         boundary_condition: str = "UHTR",
         options: dict | None = None,
     ) -> np.ndarray:
-        alpha_m2_s = float(soil.thermalCond) / (float(soil.rho) * float(soil.c))
+        alpha_m2_s = float(soil.thermal_conductivity) / (float(soil.density) * float(soil.specific_heat))
 
         return self.compute_gfunctions(
             times_s=times_s,

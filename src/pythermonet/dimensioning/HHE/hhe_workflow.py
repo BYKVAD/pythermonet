@@ -177,7 +177,7 @@ def run_hhe_sizing_workflow(
     )
 
     L = sizing.L_m
-    alpha_heat = hhe_field.k_s_eff_heating(soil) / (float(soil.rho) * float(soil.c))
+    alpha_heat = hhe_field.k_s_eff_heating(soil) / (float(soil.density) * float(soil.specific_heat))
     m_dot_heat = ground_loads.aggregated_mdot_peak_heat_kg_s / n_loops
 
     # HHE temperatures at each pulse (heating)
@@ -190,7 +190,7 @@ def run_hhe_sizing_workflow(
     # Cooling temperatures
     T_c_ann = T_c_win = T_c_peak = None
     if ground_loads.has_cooling:
-        alpha_cool = hhe_field.k_s_eff_cooling(soil) / (float(soil.rho) * float(soil.c))
+        alpha_cool = hhe_field.k_s_eff_cooling(soil) / (float(soil.density) * float(soil.specific_heat))
         m_dot_cool = ground_loads.aggregated_mdot_peak_cool_kg_s / n_loops
         g_cool = hhe_field.compute_gfunction(L, np.asarray(times_cool_s, dtype=float), alpha_cool)
         R_cool = hhe_field.R_at_L(L, m_dot_cool, brine, soil)
@@ -200,7 +200,7 @@ def run_hhe_sizing_workflow(
 
     # Volume-weighted system temperatures
     seg = pipe_infrastructure.traceSegments[0]
-    Di_hhe = float(seg.outerDiameter) * (1.0 - 2.0 / float(seg.SDR))
+    Di_hhe = float(seg.outer_diameter) * (1.0 - 2.0 / float(seg.sdr))
     V_hhe = n_pipes * (math.pi / 4.0) * Di_hhe ** 2 * L
 
     network = hydraulic.network
@@ -228,13 +228,13 @@ def run_hhe_sizing_workflow(
         T_avg_cool_peak   = _weighted(T_c_peak, T_dc[2])
 
     # HHE pressure drop (full loop = out + return = 2 × L)
-    Q_per_loop_heat = ground_loads.aggregated_mdot_peak_heat_kg_s / (n_loops * brine.rho)
-    hhe_dp_heat_Pa = float(_dp_per_m(brine.rho, brine.dynamicViscosity, Q_per_loop_heat, Di_hhe)) * 2.0 * L
+    Q_per_loop_heat = ground_loads.aggregated_mdot_peak_heat_kg_s / (n_loops * brine.density)
+    hhe_dp_heat_Pa = float(_dp_per_m(brine.density, brine.dynamic_viscosity, Q_per_loop_heat, Di_hhe)) * 2.0 * L
 
     hhe_dp_cool_Pa: float | None = None
     if ground_loads.has_cooling:
-        Q_per_loop_cool = ground_loads.aggregated_mdot_peak_cool_kg_s / (n_loops * brine.rho)
-        hhe_dp_cool_Pa = float(_dp_per_m(brine.rho, brine.dynamicViscosity, Q_per_loop_cool, Di_hhe)) * 2.0 * L
+        Q_per_loop_cool = ground_loads.aggregated_mdot_peak_cool_kg_s / (n_loops * brine.density)
+        hhe_dp_cool_Pa = float(_dp_per_m(brine.density, brine.dynamic_viscosity, Q_per_loop_cool, Di_hhe)) * 2.0 * L
 
     return HHEWorkflowResult(
         sizing=sizing,
@@ -279,7 +279,7 @@ def print_hhe_results(result: HHEWorkflowResult, pipe_infrastructure: PipeInfras
     A = _math.pi * hydraulic.inner_diameter ** 2 / 4.0
     v_heat = hydraulic.m3_s_heating / A
     dp_m_heat = np.array([
-        float(_dp_per_m2(brine.rho, brine.dynamicViscosity,
+        float(_dp_per_m2(brine.density, brine.dynamic_viscosity,
                          float(hydraulic.m3_s_heating[i]),
                          float(hydraulic.inner_diameter[i])))
         for i in range(n_traces)
@@ -289,7 +289,7 @@ def print_hhe_results(result: HHEWorkflowResult, pipe_infrastructure: PipeInfras
     if has_cool_hydro:
         v_cool = hydraulic.m3_s_cooling / A
         dp_m_cool = np.array([
-            float(_dp_per_m2(brine.rho, brine.dynamicViscosity,
+            float(_dp_per_m2(brine.density, brine.dynamic_viscosity,
                              float(hydraulic.m3_s_cooling[i]),
                              float(hydraulic.inner_diameter[i])))
             for i in range(n_traces)
@@ -353,14 +353,14 @@ def print_hhe_results(result: HHEWorkflowResult, pipe_infrastructure: PipeInfras
 
     # ── HHE sizing + pressure drop ─────────────────────────────────────────
     seg = pipe_infrastructure.traceSegments[0]
-    Di_hhe = float(seg.outerDiameter) * (1.0 - 2.0 / float(seg.SDR))
+    Di_hhe = float(seg.outer_diameter) * (1.0 - 2.0 / float(seg.sdr))
     print()
     print(f'  HHE loop length  :  {2.0 * sizing.L_m:.2f} m  (governed by {sizing.governing})')
     print(f'  Dist. fraction   :  {result.dist_thermal_heat.F_total * 100:.1f} %  (heating, distribution grid)')
     if result.dist_thermal_cool is not None:
         print(f'  Dist. fraction   :  {result.dist_thermal_cool.F_total * 100:.1f} %  (cooling, distribution grid)')
-    print(f'  HHE Do / Di      :  {float(seg.outerDiameter)*1000:.1f} mm / {Di_hhe*1000:.1f} mm  '
-          f'(SDR {float(seg.SDR):.0f})')
+    print(f'  HHE Do / Di      :  {float(seg.outer_diameter)*1000:.1f} mm / {Di_hhe*1000:.1f} mm  '
+          f'(sdr {float(seg.sdr):.0f})')
     print(f'  N parallel pipes :  {pipe_infrastructure.NParallelPipes}')
     print(f'  Burial depth     :  {float(pipe_infrastructure.burialDepth):.2f} m')
     hhe_dp_m_heat = result.hhe_dp_heat_Pa / (2.0 * sizing.L_m)

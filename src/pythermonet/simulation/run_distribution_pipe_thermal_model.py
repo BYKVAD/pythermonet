@@ -26,7 +26,7 @@ def _build_pipe_groups_from_hydraulic(hydraulic: HydraulicResult, Re_arr: np.nda
     L_m = npp * L_oneway
     pipe_spacing_m = float(network.infrastructure.pipeDistance) if npp > 1 else None
     burial_depth_m = float(network.infrastructure.burialDepth)
-    k_pipe_W_mK = float(network.globalMaterial.thermalCond)
+    k_pipe_W_mK = float(network.globalMaterial.thermal_conductivity)
 
     out: list[PipeGroup] = []
     for i in range(len(L_m)):
@@ -76,8 +76,8 @@ def compute_distribution_pipe_thermal_capacity(
     model_heat = DistributionPipeModel(
         brine=brine,
         soil=soil,
-        T0_C=float(soil.surfaceTemp),
-        surface_amp_C=float(soil.surfaceTempAmp),
+        T0_C=float(soil.surface_temperature),
+        surface_amp_C=float(soil.surface_temperature_amplitude),
         pipe_groups=pipe_groups_heat,
         heating=heating,
         cooling=None,
@@ -109,8 +109,8 @@ def compute_distribution_pipe_thermal_capacity(
         model_cool = DistributionPipeModel(
             brine=brine,
             soil=soil,
-            T0_C=float(soil.surfaceTemp),
-            surface_amp_C=float(soil.surfaceTempAmp),
+            T0_C=float(soil.surface_temperature),
+            surface_amp_C=float(soil.surface_temperature_amplitude),
             pipe_groups=pipe_groups_cool,
             heating=heating,  # required field; only the cooling result is used
             cooling=cooling,

@@ -81,19 +81,19 @@ def read_dimensioned_topology_tsv_to_hydraulic(
     n = len(df)
     trace_names = df["Section"].astype(str).str.strip().to_list()
     do_m        = df["do_(mm)"].astype(float).to_numpy() / 1000.0
-    SDR         = df["SDR"].astype(float).to_numpy()
+    sdr         = df["SDR"].astype(float).to_numpy()
     L_traces    = df["Trace_(m)"].astype(float).to_numpy()
     N_traces    = df["Number_of_traces"].astype(int).to_numpy()
     q_heat      = df["Peak_flow_heating_m3/s"].astype(float).to_numpy()
 
-    di_m = do_m * (1.0 - 2.0 / SDR)
+    di_m = do_m * (1.0 - 2.0 / sdr)
 
     # --- DistributionNetwork ---
     trace_segments: list[PipeSegment] = []
     for i in range(n):
         seg = PipeSegment(
-            outerDiameter=float(do_m[i]),
-            SDR=float(SDR[i]),
+            outer_diameter=float(do_m[i]),
+            sdr=float(sdr[i]),
             material=pipe_material,
             roughnessHeight=0.0,   # not needed — pipes already sized
             ID=int(i),
@@ -113,7 +113,7 @@ def read_dimensioned_topology_tsv_to_hydraulic(
         trace_names=trace_names,
         hp_id_trace=[np.array([], dtype=int)] * n,
         max_pressure_loss_trace=np.full(n, np.nan),
-        SDR=SDR,
+        sdr=sdr,
         L_traces=L_traces,
         N_traces=N_traces,
     )
@@ -121,7 +121,7 @@ def read_dimensioned_topology_tsv_to_hydraulic(
     # --- Reynolds numbers ---
     v_heat = q_heat / (np.pi * di_m**2 / 4.0)
     Re_heat = np.array(
-        [reynolds_number(brine.rho, brine.dynamicViscosity, float(v), float(d))
+        [reynolds_number(brine.density, brine.dynamic_viscosity, float(v), float(d))
          for v, d in zip(v_heat, di_m)],
         dtype=float,
     )
@@ -130,7 +130,7 @@ def read_dimensioned_topology_tsv_to_hydraulic(
         q_cool = df["Peak_flow_cooling_m3/s"].astype(float).to_numpy()
         v_cool = q_cool / (np.pi * di_m**2 / 4.0)
         Re_cool = np.array(
-            [reynolds_number(brine.rho, brine.dynamicViscosity, float(v), float(d))
+            [reynolds_number(brine.density, brine.dynamic_viscosity, float(v), float(d))
              for v, d in zip(v_cool, di_m)],
             dtype=float,
         )

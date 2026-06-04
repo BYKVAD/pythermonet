@@ -71,8 +71,8 @@ def compute_gfunction_infinite_medium(
 
         # 1D areal field approximated as an equivalent 1-pipe segment.
         # This is conservative and can be improved as needed by caller.
-        material = Material(rho=950.0, c=1900.0, thermalCond=0.4)
-        segment = PipeSegment(outerDiameter=2*0.016, SDR=11, material=material, roughnessHeight=1.5e-5, ID=0, length=float(H_m))
+        material = Material(density=950.0, specific_heat=1900.0, thermal_conductivity=0.4)
+        segment = PipeSegment(outer_diameter=2*0.016, sdr=11, material=material, roughnessHeight=1.5e-5, ID=0, length=float(H_m))
 
         pi = PipeInfrastructure(
             NParallelPipes=max(1, int(coords_xy_m.shape[0])),

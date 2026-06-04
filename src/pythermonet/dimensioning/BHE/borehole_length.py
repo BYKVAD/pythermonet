@@ -149,7 +149,7 @@ def _K_factor(
     P_bhe_W : [P_annual, P_winter, P_peak]
     """
     N = vhe_field.n_boreholes
-    k_s = float(soil.thermalCond)
+    k_s = float(soil.thermal_conductivity)
     P_a, P_w, P_p = float(P_bhe_W[0]), float(P_bhe_W[1]), float(P_bhe_W[2])
 
     ground_term = (
@@ -174,8 +174,8 @@ def _initial_guess_heating(
     Returns the positive root via a numerically stable formula.
     """
     K = _K_factor(P_bhe_W, g_ils, vhe_field, soil, Rb_simple)
-    a = float(soil.Qgeo) / (2.0 * float(soil.thermalCond))
-    dT0 = float(soil.surfaceTemp) - T_fluid_min
+    a = float(soil.geothermal_heat_flux) / (2.0 * float(soil.thermal_conductivity))
+    dT0 = float(soil.surface_temperature) - T_fluid_min
 
     disc = dT0 ** 2 + 4.0 * a * K
     return 2.0 * K / (dT0 + math.sqrt(disc))
@@ -196,8 +196,8 @@ def _initial_guess_cooling(
     Returns None if infeasible with ILS (caller falls back to H_max).
     """
     K = _K_factor(P_bhe_W, g_ils, vhe_field, soil, Rb_simple)
-    a = float(soil.Qgeo) / (2.0 * float(soil.thermalCond))
-    margin = T_fluid_max - float(soil.surfaceTemp)
+    a = float(soil.geothermal_heat_flux) / (2.0 * float(soil.thermal_conductivity))
+    margin = T_fluid_max - float(soil.surface_temperature)
 
     disc = margin ** 2 - 4.0 * a * K
     if disc < 0.0:
@@ -212,7 +212,7 @@ def _initial_guess_cooling(
 
 def _T_ground_mean(H: float, soil: Soil) -> float:
     """Mean undisturbed ground temperature along borehole [°C]."""
-    return float(soil.surfaceTemp) + float(soil.Qgeo) * H / (2.0 * float(soil.thermalCond))
+    return float(soil.surface_temperature) + float(soil.geothermal_heat_flux) * H / (2.0 * float(soil.thermal_conductivity))
 
 
 def _delta_T_ground(
@@ -229,7 +229,7 @@ def _delta_T_ground(
     q_p = float(P_bhe_W[2]) / (N * H)
     return (
         q_a * g[2] + (q_w - q_a) * g[1] + (q_p - q_w) * g[0]
-    ) / (2.0 * math.pi * float(soil.thermalCond))
+    ) / (2.0 * math.pi * float(soil.thermal_conductivity))
 
 
 def _T_fluid_heat_at_H(
@@ -327,7 +327,7 @@ def size_borehole_length(
         temperature convergence of ~0.001 K, comparable to the 1e-4 K
         tolerance used in earlier Halley-method implementations.
     """
-    alpha = float(soil.thermalCond) / (float(soil.rho) * float(soil.c))
+    alpha = float(soil.thermal_conductivity) / (float(soil.density) * float(soil.specific_heat))
     times_s = np.asarray(times_s, dtype=float)
     P_bhe_W = np.asarray(P_bhe_W, dtype=float)
 
@@ -409,7 +409,7 @@ def size_borehole_length_heating_cooling(
     """
     has_cooling = P_cooling_W is not None
 
-    alpha = float(soil.thermalCond) / (float(soil.rho) * float(soil.c))
+    alpha = float(soil.thermal_conductivity) / (float(soil.density) * float(soil.specific_heat))
     times_heat_s = np.asarray(times_heat_s, dtype=float)
     P_heating_W = np.asarray(P_heating_W, dtype=float)
 
@@ -568,7 +568,7 @@ def _initial_guess_heating_field(
     """
     Solve  T_ref + a·L - K/L = T_fluid_min  for L.
 
-    For BHE  a = Qgeo/(2·k_s) > 0  →  standard quadratic.
+    For BHE  a = geothermal_heat_flux/(2·k_s) > 0  →  standard quadratic.
     For HHE  a = 0               →  degenerates to L = K/dT0.
     Both cases are handled by the same numerically stable formula.
     """
@@ -663,7 +663,7 @@ def size_ground_field_length(
 
     Works with any GroundField implementation (BHEGroundField or HHEGroundField).
     """
-    alpha = field.k_s_eff_heating(soil) / (float(soil.rho) * float(soil.c))
+    alpha = field.k_s_eff_heating(soil) / (float(soil.density) * float(soil.specific_heat))
     times_s = np.asarray(times_s, dtype=float)
     P_W = np.asarray(P_W, dtype=float)
 
@@ -729,8 +729,8 @@ def size_ground_field_length_heating_cooling(
 
     # Use mode-specific effective conductivity for alpha so that shallow HHE fields
     # use the correct shallow diffusivity rather than the deep-soil value.
-    alpha_heat = field.k_s_eff_heating(soil) / (float(soil.rho) * float(soil.c))
-    alpha_cool = field.k_s_eff_cooling(soil) / (float(soil.rho) * float(soil.c))
+    alpha_heat = field.k_s_eff_heating(soil) / (float(soil.density) * float(soil.specific_heat))
+    alpha_cool = field.k_s_eff_cooling(soil) / (float(soil.density) * float(soil.specific_heat))
 
     times_heat_s = np.asarray(times_heat_s, dtype=float)
     P_heating_W = np.asarray(P_heating_W, dtype=float)

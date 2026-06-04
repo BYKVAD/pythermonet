@@ -41,25 +41,25 @@ def compute_rb_for_vhe_field(
     use_flow_length_correction: bool = True,
 ) -> BHEResistanceResult:
     # --- Geometri ---
-    od_p = float(vhe_field.pipe.outerDiameter)
-    sdr = float(vhe_field.pipe.SDR)
+    od_p = float(vhe_field.pipe.outer_diameter)
+    sdr = float(vhe_field.pipe.sdr)
     Di = _inner_diameter_from_od_sdr(od_p, sdr)
 
     r_p = 0.5 * od_p
     r_i = 0.5 * Di
-    r_b = 0.5 * float(vhe_field.borehole.outerDiameter)
+    r_b = 0.5 * float(vhe_field.borehole.outer_diameter)
     s = float(vhe_field.shankSpacing)
 
     # --- Materialer ---
-    k_fluid = float(brine.thermalCond)
-    k_pipe = float(vhe_field.pipe.material.thermalCond)
-    k_grout = float(vhe_field.grout.thermalCond)
-    k_soil = float(soil.thermalCond)
+    k_fluid = float(brine.thermal_conductivity)
+    k_pipe = float(vhe_field.pipe.material.thermal_conductivity)
+    k_grout = float(vhe_field.grout.thermal_conductivity)
+    k_soil = float(soil.thermal_conductivity)
 
     # --- Flow og dimensionløse tal ---
-    rho = float(brine.rho)
-    mu = float(brine.dynamicViscosity)
-    cp = float(brine.c)
+    rho = float(brine.density)
+    mu = float(brine.dynamic_viscosity)
+    cp = float(brine.specific_heat)
 
     Q = m_dot_kg_s / rho
     A = math.pi * (Di**2) / 4.0

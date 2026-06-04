@@ -3,8 +3,8 @@ from .material import Material
 
 @dataclass
 class Soil(Material):
-    thermalCondShallowHeating: float   # W/m/K
-    thermalCondShallowCooling: float   # W/m/K
-    Qgeo: float                        # W/m2
-    surfaceTemp: float                # °C
-    surfaceTempAmp: float             # K
+    thermal_conductivity_shallow_heating: float   # W/m/K
+    thermal_conductivity_shallow_cooling: float   # W/m/K
+    geothermal_heat_flux: float                        # W/m2
+    surface_temperature: float                # °C
+    surface_temperature_amplitude: float             # K

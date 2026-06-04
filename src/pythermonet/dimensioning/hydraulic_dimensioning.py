@@ -12,8 +12,8 @@ logger = get_logger(__name__)
 
 
 def run_pipedimensioning(
-    pipe_catalogue,   # Iterable of pipe catalogue entries (outerDiameter, SDR, ...)
-    brine,            # HeatCarrier (rho, c, dynamicViscosity)
+    pipe_catalogue,   # Iterable of pipe catalogue entries (outer_diameter, sdr, ...)
+    brine,            # HeatCarrier (density, specific_heat, dynamic_viscosity)
     network,          # DistributionNetwork
     heat_pump_list,   # list[HeatPump]
 ) -> HydraulicResult:
@@ -27,7 +27,7 @@ def run_pipedimensioning(
 
     # Sortér unikke outer diameters fra kataloget
     pipe_catalogue_sorted = np.asarray(
-        sorted({a.outerDiameter for a in pipe_catalogue}),
+        sorted({a.outer_diameter for a in pipe_catalogue}),
         dtype=float,
     )
 
@@ -43,7 +43,7 @@ def run_pipedimensioning(
     m3_s_per_trace_heating = np.zeros(N_trace, dtype=float)
     m3_s_per_trace_cooling = np.zeros(N_trace, dtype=float) if doCooling else None
 
-    SDR_arr = np.asarray(network.SDR, dtype=float)
+    sdr_arr = np.asarray(network.sdr, dtype=float)
     L_trace_arr = np.asarray(network.L_traces, dtype=float)
     N_traces_arr = np.asarray(network.N_traces, dtype=float)
     max_dp_arr = np.asarray(network.max_pressure_loss_trace, dtype=float)
@@ -67,8 +67,8 @@ def run_pipedimensioning(
             Qv_hp = (
                 hp.peakHeating_ground_load
                 / hp.deltaTHeating
-                / brine.rho
-                / brine.c
+                / brine.density
+                / brine.specific_heat
             )
             m3_s_peak_heating_sum += float(Qv_hp)
 
@@ -83,8 +83,8 @@ def run_pipedimensioning(
                 Qv_hp = (
                     hp.peakCooling_ground_load
                     / hp.deltaTCooling
-                    / brine.rho
-                    / brine.c
+                    / brine.density
+                    / brine.specific_heat
                 )
                 m3_s_peak_cooling_sum += float(Qv_hp)
 
@@ -98,10 +98,10 @@ def run_pipedimensioning(
     governing_mode = np.empty(N_trace, dtype=object)
 
     for i in range(N_trace):
-        SDR_i = float(SDR_arr[i])
+        sdr_i = float(sdr_arr[i])
 
         candidate_outer_diameters = pipe_catalogue_sorted
-        candidate_inner_diameters = candidate_outer_diameters * (1.0 - 2.0 / SDR_i)
+        candidate_inner_diameters = candidate_outer_diameters * (1.0 - 2.0 / sdr_i)
 
         L_tot_i = n_parallel_pipes * float(L_trace_arr[i])
         dp_limit_i = float(max_dp_arr[i])
@@ -110,8 +110,8 @@ def run_pipedimensioning(
         ok_heat = np.array(
             [
                 L_tot_i * dp(
-                    brine.rho,
-                    brine.dynamicViscosity,
+                    brine.density,
+                    brine.dynamic_viscosity,
                     float(m3_s_per_trace_heating[i]),
                     float(di),
                 ) < dp_limit_i
@@ -133,8 +133,8 @@ def run_pipedimensioning(
             ok_cool = np.array(
                 [
                     L_tot_i * dp(
-                        brine.rho,
-                        brine.dynamicViscosity,
+                        brine.density,
+                        brine.dynamic_viscosity,
                         float(m3_s_per_trace_cooling[i]),
                         float(di),
                     ) < dp_limit_i
@@ -168,13 +168,13 @@ def run_pipedimensioning(
     # 3) Beregn Reynolds-tal og tryktab for det installerede netværk
     #    i begge modes
     # ------------------------------------------------------------------
-    installed_inner_diameter = selected_outer_diameter * (1.0 - 2.0 / SDR_arr)
+    installed_inner_diameter = selected_outer_diameter * (1.0 - 2.0 / sdr_arr)
     L_tot_arr = n_parallel_pipes * L_trace_arr
 
     v_H = m3_s_per_trace_heating / (np.pi * installed_inner_diameter**2 / 4.0)
     Re_heating = np.array(
         [
-            Re(brine.rho, brine.dynamicViscosity, abs(float(v)), float(d))
+            Re(brine.density, brine.dynamic_viscosity, abs(float(v)), float(d))
             for v, d in zip(v_H, installed_inner_diameter)
         ],
         dtype=float,
@@ -182,8 +182,8 @@ def run_pipedimensioning(
     dp_heating = np.array(
         [
             L_tot_arr[i] * dp(
-                brine.rho,
-                brine.dynamicViscosity,
+                brine.density,
+                brine.dynamic_viscosity,
                 float(m3_s_per_trace_heating[i]),
                 float(installed_inner_diameter[i]),
             )
@@ -198,7 +198,7 @@ def run_pipedimensioning(
         v_C = m3_s_per_trace_cooling / (np.pi * installed_inner_diameter**2 / 4.0)
         Re_cooling = np.array(
             [
-                Re(brine.rho, brine.dynamicViscosity, abs(float(v)), float(d))
+                Re(brine.density, brine.dynamic_viscosity, abs(float(v)), float(d))
                 for v, d in zip(v_C, installed_inner_diameter)
             ],
             dtype=float,
@@ -206,8 +206,8 @@ def run_pipedimensioning(
         dp_cooling = np.array(
             [
                 L_tot_arr[i] * dp(
-                    brine.rho,
-                    brine.dynamicViscosity,
+                    brine.density,
+                    brine.dynamic_viscosity,
                     float(m3_s_per_trace_cooling[i]),
                     float(installed_inner_diameter[i]),
                 )

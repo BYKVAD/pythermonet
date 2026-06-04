@@ -2,6 +2,6 @@ from dataclasses import dataclass
 
 @dataclass
 class Material:
-    rho: float                 # kg/m3
-    c: float                   # J/kg/K
-    thermalCond: float         # W/m/K
+    density: float             # kg/m3
+    specific_heat: float       # J/kg/K
+    thermal_conductivity: float         # W/m/K

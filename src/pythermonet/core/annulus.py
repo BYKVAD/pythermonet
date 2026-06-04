@@ -3,5 +3,5 @@ from typing import Optional
 
 @dataclass
 class Annulus:
-    outerDiameter: Optional[float]  # ingen default
-    SDR: float
+    outer_diameter: Optional[float]  # ingen default
+    sdr: float

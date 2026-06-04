@@ -86,10 +86,10 @@ def ground_loads_from_heat_pumps(
     if not (0.0 <= peak_fraction_cooling <= 1.0):
         raise ValueError("peak_fraction_cooling must be in [0, 1]")
 
-    cp = float(brine.c)
-    rho = float(brine.rho)
+    cp = float(brine.specific_heat)
+    rho = float(brine.density)
     if cp <= 0 or rho <= 0:
-        raise ValueError("brine.c and brine.rho must be > 0")
+        raise ValueError("brine.specific_heat and brine.density must be > 0")
 
     f = float(diversity_factor_from_n_heat_pumps(n))
 
@@ -216,7 +216,7 @@ def ground_loads_from_district(
     The peak is scaled by  f_peak × diversity_factor(n_consumers).
     """
     li = load_input
-    cp = float(brine.c)
+    cp = float(brine.specific_heat)
 
     if not (0.0 <= f_peak_heating <= 1.0):
         raise ValueError(f"f_peak_heating must be in [0, 1]. Got {f_peak_heating}")

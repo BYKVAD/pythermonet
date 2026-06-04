@@ -38,27 +38,27 @@ topology_file = PROJECT_DIR / "data/silkeborg_topology.dat"
 pipe_catalogue = read_pipe_catalogue(pipe_catalogue_file)
 
 pipe_material_dist = Material(
-    rho=975,
-    c=1900,
-    thermalCond=0.4,
+    density=975,
+    specific_heat=1900,
+    thermal_conductivity=0.4,
 )
 
 brine = HeatCarrier(
-    rho=965,
-    c=4450,
-    thermalCond=0.45,
-    dynamicViscosity=5e-3,
+    density=965,
+    specific_heat=4450,
+    thermal_conductivity=0.45,
+    dynamic_viscosity=5e-3,
 )
 
 soil = Soil(
-    rho=2500,
-    c=1000,
-    thermalCond=2.36,
-    thermalCondShallowHeating=1.25,
-    thermalCondShallowCooling=1.25,
-    Qgeo=0.0185,
-    surfaceTemp=9.03,
-    surfaceTempAmp=7.9,
+    density=2500,
+    specific_heat=1000,
+    thermal_conductivity=2.36,
+    thermal_conductivity_shallow_heating=1.25,
+    thermal_conductivity_shallow_cooling=1.25,
+    geothermal_heat_flux=0.0185,
+    surface_temperature=9.03,
+    surface_temperature_amplitude=7.9,
 )
 
 # -----------------------------------------------------------------------------
@@ -82,13 +82,13 @@ coordinates = [[0.0, i * spacing_m] for i in range(n_boreholes)]
 borehole_diameter_m = 0.152
 u_pipe_outer_diameter_m = 0.04
 u_pipe_sdr = 11.0
-grout = Material(rho=1500, c=2e3, thermalCond=1.75)
-pipe_material_bhe = Material(rho=1000, c=2e3, thermalCond=0.4)
-borehole = Annulus(outerDiameter=borehole_diameter_m, SDR=1000.0)
+grout = Material(density=1500, specific_heat=2e3, thermal_conductivity=1.75)
+pipe_material_bhe = Material(density=1000, specific_heat=2e3, thermal_conductivity=0.4)
+borehole = Annulus(outer_diameter=borehole_diameter_m, sdr=1000.0)
 
 upipe = PipeSegment(
-    outerDiameter=u_pipe_outer_diameter_m,
-    SDR=u_pipe_sdr,
+    outer_diameter=u_pipe_outer_diameter_m,
+    sdr=u_pipe_sdr,
     material=pipe_material_bhe,
     roughnessHeight=1e-6,
     ID=0,

@@ -89,8 +89,8 @@ def _bhe_mean_temperatures_heating(
     Returns (T_annual, T_winter, T_peak).
     """
     N = vhe_field.n_boreholes
-    k_s = float(soil.thermalCond)
-    T_g = float(soil.surfaceTemp) + float(soil.Qgeo) * H_m / (2.0 * k_s)
+    k_s = float(soil.thermal_conductivity)
+    T_g = float(soil.surface_temperature) + float(soil.geothermal_heat_flux) * H_m / (2.0 * k_s)
     two_pi_ks = 2.0 * math.pi * k_s
 
     q_a = float(P_bhe_W[0]) / (N * H_m)
@@ -123,8 +123,8 @@ def _bhe_mean_temperatures_cooling(
     Returns (T_annual, T_winter, T_peak).
     """
     N = vhe_field.n_boreholes
-    k_s = float(soil.thermalCond)
-    T_g = float(soil.surfaceTemp) + float(soil.Qgeo) * H_m / (2.0 * k_s)
+    k_s = float(soil.thermal_conductivity)
+    T_g = float(soil.surface_temperature) + float(soil.geothermal_heat_flux) * H_m / (2.0 * k_s)
     two_pi_ks = 2.0 * math.pi * k_s
 
     q_a = float(P_bhe_W[0]) / (N * H_m)
@@ -188,7 +188,7 @@ def compute_system_brine_temperatures(
     has_cooling = P_cooling_W is not None
 
     H_m = sizing.L_m
-    alpha = float(soil.thermalCond) / (float(soil.rho) * float(soil.c))
+    alpha = float(soil.thermal_conductivity) / (float(soil.density) * float(soil.specific_heat))
     P_heating_W = np.asarray(P_heating_W, dtype=float)
 
     if has_cooling and not pre_balanced:
@@ -208,7 +208,7 @@ def compute_system_brine_temperatures(
     # ------------------------------------------------------------------
     # Fluid volumes (needed for weighted averaging below)
     # ------------------------------------------------------------------
-    Di_bhe = float(vhe_field.pipe.outerDiameter) * (1.0 - 2.0 / float(vhe_field.pipe.SDR))
+    Di_bhe = float(vhe_field.pipe.outer_diameter) * (1.0 - 2.0 / float(vhe_field.pipe.sdr))
     V_bhe = vhe_field.n_boreholes * 2.0 * (math.pi / 4.0) * Di_bhe ** 2 * H_m
 
     network = hydraulic.network

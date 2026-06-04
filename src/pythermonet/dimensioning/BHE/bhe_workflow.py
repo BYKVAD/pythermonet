@@ -134,18 +134,18 @@ def run_bhe_sizing_workflow(
     )
 
     # BHE pressure drop at peak flow (2 legs of the U-pipe)
-    Di_bhe = float(vhe_field.pipe.outerDiameter) * (1.0 - 2.0 / float(vhe_field.pipe.SDR))
-    Q_per_bh_heat = ground_loads.aggregated_mdot_peak_heat_kg_s / (n_boreholes * brine.rho)
+    Di_bhe = float(vhe_field.pipe.outer_diameter) * (1.0 - 2.0 / float(vhe_field.pipe.sdr))
+    Q_per_bh_heat = ground_loads.aggregated_mdot_peak_heat_kg_s / (n_boreholes * brine.density)
     bhe_dp_heat_Pa = (
-        float(_dp_per_m(brine.rho, brine.dynamicViscosity, Q_per_bh_heat, Di_bhe))
+        float(_dp_per_m(brine.density, brine.dynamic_viscosity, Q_per_bh_heat, Di_bhe))
         * 2.0 * field_sizing.L_m
     )
 
     bhe_dp_cool_Pa: float | None = None
     if ground_loads.has_cooling:
-        Q_per_bh_cool = ground_loads.aggregated_mdot_peak_cool_kg_s / (n_boreholes * brine.rho)
+        Q_per_bh_cool = ground_loads.aggregated_mdot_peak_cool_kg_s / (n_boreholes * brine.density)
         bhe_dp_cool_Pa = (
-            float(_dp_per_m(brine.rho, brine.dynamicViscosity, Q_per_bh_cool, Di_bhe))
+            float(_dp_per_m(brine.density, brine.dynamic_viscosity, Q_per_bh_cool, Di_bhe))
             * 2.0 * field_sizing.L_m
         )
 
@@ -179,7 +179,7 @@ def print_bhe_results(result: BHEWorkflowResult) -> None:
     A = math.pi * hydraulic.inner_diameter**2 / 4.0
     v_heat = hydraulic.m3_s_heating / A
     dp_m_heat = np.array([
-        float(_dp_per_m(brine.rho, brine.dynamicViscosity,
+        float(_dp_per_m(brine.density, brine.dynamic_viscosity,
                         float(hydraulic.m3_s_heating[i]),
                         float(hydraulic.inner_diameter[i])))
         for i in range(n_traces)
@@ -189,7 +189,7 @@ def print_bhe_results(result: BHEWorkflowResult) -> None:
     if has_cool_hydro:
         v_cool = hydraulic.m3_s_cooling / A
         dp_m_cool = np.array([
-            float(_dp_per_m(brine.rho, brine.dynamicViscosity,
+            float(_dp_per_m(brine.density, brine.dynamic_viscosity,
                             float(hydraulic.m3_s_cooling[i]),
                             float(hydraulic.inner_diameter[i])))
             for i in range(n_traces)
