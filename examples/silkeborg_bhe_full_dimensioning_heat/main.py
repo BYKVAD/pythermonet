@@ -20,7 +20,7 @@ from pythermonet.core.pipe_segment import PipeSegment
 
 from pythermonet.dimensioning.BHE.bhe_workflow import run_bhe_sizing_workflow, print_bhe_results
 from pythermonet.dimensioning.sizing_parameters import SizingParameters
-
+from pythermonet.input.df_from_sources import df_from_csv
 # -----------------------------------------------------------------------------
 # Paths
 # -----------------------------------------------------------------------------
@@ -28,14 +28,14 @@ PROJECT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PROJECT_DIR.parents[2]
 
 pipe_catalogue_file = REPO_ROOT / "PythermonetII/src/pythermonet/resources/pipe_catalogue.csv"
-heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat_high_cool.dat"
+heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat_only.dat"
 topology_file = PROJECT_DIR / "data/silkeborg_topology.dat"
 
 
 # -----------------------------------------------------------------------------
 # 1) Read pipe catalogue, define materials + fluids + soil
 # -----------------------------------------------------------------------------
-pipe_catalogue = read_pipe_catalogue(pipe_catalogue_file)
+pipe_catalogue = read_pipe_catalogue(df_from_csv(pipe_catalogue_file))
 
 pipe_material_dist = Material(
     rho=975,
@@ -65,7 +65,7 @@ soil = Soil(
 # 2) Distribution network
 # -----------------------------------------------------------------------------
 distribution_network_undimensioned = read_undimensioned_topology_tsv_to_network(
-    topology_file,
+    df_from_csv(topology_file, sep="\t+"),
     pipe_material=pipe_material_dist,
     roughness_height=1e-6,
     burial_depth=1.2,
@@ -112,7 +112,12 @@ BHEfield = VHEField(
 # -----------------------------------------------------------------------------
 # 4) Heat pumps
 # -----------------------------------------------------------------------------
-hp_list = read_heat_pumps_tsv(path=heat_pump_file)
+hp_list = read_heat_pumps_tsv(df_from_csv(path=heat_pump_file, sep="\t+"))
+
+sys.path.insert(0, str(PROJECT_DIR.parent / "optimizer_capex_vs_energy"))
+from ashp_vs_gshp import monthly_elec_loads  # type: ignore[import-not-found]
+
+monthly_elec_loads(hp_list, [3.2, 3.2, 3.4, 3.4, 3.4, 3.4, 3.5, 3.6, 3.6, 3.6, 3.5, 3.4])
 
 loads = ground_loads_from_heat_pumps(
     hp_list,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pythermonet.components.heat_pump import HeatPump
 from pythermonet.components.ground_loads import ground_loads_from_heat_pumps
+from pythermonet.optimizer.fake_heat_pump import build_fake_heat_pump
 from pythermonet.core.material import Material
 from pythermonet.core.heat_carrier import HeatCarrier
 from pythermonet.core.soil import Soil
@@ -26,20 +26,19 @@ from typing import List
 
 
 
-def _calc_yearly_electricity_demand(loads: BHEWorkflowResult) -> int:
+BUILDING_HP_COP = 3.3
 
-    total_watt_heating = 0 if loads.P_full_heating_W is None else loads.P_full_heating_W[0]
-    total_watt_cooling = 0 if loads.P_full_cooling_W is None else loads.P_full_cooling_W[0]
 
-    total_watt = total_watt_heating-total_watt_cooling
-
-    mw = total_watt / 1000000
-
-    building_energy_consumption = mw * (24*365)
-
-    energy_elec = building_energy_consumption / 3.3
-
-    return energy_elec
+def _calc_building_hp_electricity_MWh(building_hp_list) -> float:
+    """
+    Annual electricity drawn by the building heat pumps to deliver their
+    annual heating load (assumed COP = BUILDING_HP_COP). Independent of
+    ground regeneration — building demand does not change when a
+    supplementary injector reduces ground extraction.
+    """
+    annual_heat_W = sum(hp.annualHeatingLoad for hp in building_hp_list)
+    annual_heat_MWh = annual_heat_W * 8760.0 / 1_000_000.0
+    return annual_heat_MWh / BUILDING_HP_COP
 
 
 def _define_materials() -> tuple[List[Annulus], Material, HeatCarrier, Soil]:
@@ -85,9 +84,9 @@ def _define_undim_distribution_network(pipe_material_dist: Material):
     )
 
 
-def _setup_borefield():
-    n_boreholes = 6
-    spacing_m = 15.0
+def _setup_borefield(n_boreholes: int = 6, spacing_m: float = 15.0):
+    if n_boreholes < 1:
+        raise ValueError("n_boreholes must be >= 1")
     coordinates = [[0.0, i * spacing_m] for i in range(n_boreholes)]
     borehole_diameter_m = 0.152
     u_pipe_outer_diameter_m = 0.04
@@ -122,42 +121,58 @@ def _setup_borefield():
     return BHEfield
 
 
-def _setup_heatpump(brine: HeatCarrier):
-    hp_list = read_heat_pumps_tsv(df_from_csv(r"C:\software\pythermonetII\examples\silkeborg_bhe_full_dimensioning_heat\data\silkeborg_heat_pump_heat_only.dat",sep=r"\t+"))
+_GROUND_LOADS_KWARGS = dict(
+    peak_heating_h=4.0,
+    peak_fraction_heating_mode="incremental",
+    peak_fraction_heating=1.0,
+    peak_cooling_h=4.0,
+    peak_fraction_cooling_mode="incremental",
+    peak_fraction_cooling=1.0,
+)
 
-    loads = ground_loads_from_heat_pumps(
-        hp_list,
-        brine,
-        peak_heating_h=4.0,
-        peak_fraction_heating_mode="incremental",
-        peak_fraction_heating=1.0,
-        peak_cooling_h=4.0,
-        peak_fraction_cooling_mode="incremental",
-        peak_fraction_cooling=1.0,
-    )
+
+def _setup_heatpump():
+    hp_list = read_heat_pumps_tsv(df_from_csv(r"C:\software\pythermonetII\examples\silkeborg_bhe_full_dimensioning_heat\data\silkeborg_heat_pump_heat_only.dat",sep=r"\t+"))
 
     sizing = SizingParameters(time_horizon_years=30.0)
 
-    return hp_list, loads, sizing
+    return hp_list, sizing
 
 
-def setup_init_model():
+def setup_init_model(n_boreholes: int = 6):
     pipe_catalogue, pipe_material_dist, brine, soil = _define_materials()
     undim_distrib_network = _define_undim_distribution_network(pipe_material_dist)
-    BHEField = _setup_borefield()
-    hp_list, loads, sizing = _setup_heatpump(brine)
+    BHEField = _setup_borefield(n_boreholes=n_boreholes)
+    hp_list, sizing = _setup_heatpump()
 
-    return pipe_catalogue, brine, soil, undim_distrib_network, BHEField, hp_list, loads, sizing
+    return pipe_catalogue, brine, soil, undim_distrib_network, BHEField, hp_list, sizing
 
 
 
-def execute_dimensioning():#pipe_catalogue: List[Annulus], ):
+def execute_dimensioning(
+    rated_power_W: float,
+    capacity_factor: float | None = None,
+    summer_capacity_factor: float | None = None,
+    n_boreholes: int = 6,
+):
 
     sys.stdout.reconfigure(encoding="utf-8")
 
 
-    pipe_catalogue, brine, soil, distribution_network_undimensioned, BHEfield, hp_list, loads, sizing= setup_init_model()
+    pipe_catalogue, brine, soil, distribution_network_undimensioned, BHEfield, building_hp_list, sizing = setup_init_model(n_boreholes=n_boreholes)
 
+    # The fake HP is an external heat injector — not part of the topology, so it
+    # must NOT enter hydraulic pipe sizing. It DOES contribute to the ground
+    # heat balance, so it goes into the load aggregation only.
+    hp_list_for_loads = list(building_hp_list)
+    if rated_power_W > 0:
+        hp_list_for_loads.append(build_fake_heat_pump(
+            rated_power_W,
+            capacity_factor=capacity_factor,
+            summer_capacity_factor=summer_capacity_factor,
+        ))
+
+    loads = ground_loads_from_heat_pumps(hp_list_for_loads, brine, **_GROUND_LOADS_KWARGS)
     # -----------------------------------------------------------------------------
     # 5) Brine temperature limits
     # -----------------------------------------------------------------------------
@@ -171,7 +186,7 @@ def execute_dimensioning():#pipe_catalogue: List[Annulus], ):
         pipe_catalogue,
         brine,
         distribution_network_undimensioned,
-        hp_list,
+        building_hp_list,
     )
 
     # -----------------------------------------------------------------------------
@@ -188,8 +203,19 @@ def execute_dimensioning():#pipe_catalogue: List[Annulus], ):
         T_brine_max_cool=T_BRINE_MAX_COOL,
     )
 
-    mwh = _calc_yearly_electricity_demand(result)
+    mwh = _calc_building_hp_electricity_MWh(building_hp_list)
 
-    return {"source_length": result.sizing.L_m, "elec_consump": mwh}
+    annual_heat_MWh = sum(hp.annualHeatingLoad for hp in building_hp_list) * 8760.0 / 1_000_000.0
+    building_ground_extraction_MWh = sum(
+        hp.annualHeating_ground_load for hp in building_hp_list
+    ) * 8760.0 / 1_000_000.0
+
+    return {
+        "source_length": result.sizing.L_m,
+        "num_boreholes": BHEfield.n_boreholes,
+        "elec_consump": mwh,
+        "heat_consump": annual_heat_MWh,
+        "building_ground_extraction_MWh": building_ground_extraction_MWh,
+    }
 
     

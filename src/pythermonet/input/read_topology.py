@@ -52,7 +52,6 @@ def read_undimensioned_topology_tsv_to_network(
       (diameter sættes senere af pipe-dimensionering).
     - Topologi/dimensioneringsfelter lagres på DistributionNetwork.
     """
-
     df.columns = [c.strip() for c in df.columns]
 
     missing = [c for c in _REQUIRED_COLS if c not in df.columns]
