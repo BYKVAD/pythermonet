@@ -70,7 +70,7 @@ def bhe_dimensioning():
     network = read_undimensioned_topology_tsv_to_network(
         _EXAMPLE_DIR / "data" / "silkeborg_topology.dat",
         pipe_material=pipe_material_dist,
-        roughness_height=1e-6,
+        roughness=1e-6,
         burial_depth=1.2,
         pipe_distance=0.3,
         n_parallel_pipes=2,
@@ -82,16 +82,16 @@ def bhe_dimensioning():
     borehole      = Annulus(outerDiameter=0.152, SDR=1000.0)
     upipe = PipeSegment(
         outerDiameter=0.04, SDR=11.0, material=pipe_mat_bhe,
-        roughnessHeight=1e-6, ID=0, length=100,
+        roughness=1e-6, id_=0, length=100,
     )
     n_boreholes = 6
     spacing_m   = 15.0
     bhe_field = VHEField(
-        ID=1, HE="1U",
+        id_=1, heat_exchanger_type="1U",
         pipe=upipe, borehole=borehole, grout=grout,
         coordinates=[[0.0, i * spacing_m] for i in range(n_boreholes)],
-        shankSpacing=0.015 + 2 * 0.02,
-        H_m=120.0, D_m=1.0,
+        shank_spacing=0.015 + 2 * 0.02,
+        borehole_length=120.0, burial_depth=1.0,
         tilt_rad=0.0, orientation_rad=0.0,
     )
 
@@ -101,15 +101,15 @@ def bhe_dimensioning():
     loads = ground_loads_from_heat_pumps(
         hp_list,
         brine,
-        peak_heating_h=4.0,
+        peak_hours_heating=4.0,
         peak_fraction_heating_mode="incremental",
         peak_fraction_heating=1.0,
-        peak_cooling_h=4.0,
+        peak_hours_cooling=4.0,
         peak_fraction_cooling_mode="incremental",
         peak_fraction_cooling=1.0,
     )
 
-    sizing = SizingParameters(time_horizon_years=30.0)
+    sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
 
     hydraulic = run_pipedimensioning(pipe_catalogue, brine, network, hp_list)
 
@@ -147,7 +147,7 @@ class TestHydraulicDimensioning:
 
     def test_pipe_outer_diameters(self, bhe_dimensioning):
         hydraulic, _ = bhe_dimensioning
-        od_mm = hydraulic.outer_diameter * 1e3
+        od_mm = hydraulic.pipe_outer_diameters * 1e3
         np.testing.assert_allclose(
             od_mm, _REF_OD_MM, atol=0.1,
             err_msg="Pipe OD selection differs from reference",
@@ -156,14 +156,14 @@ class TestHydraulicDimensioning:
     def test_reynolds_heating(self, bhe_dimensioning):
         hydraulic, _ = bhe_dimensioning
         np.testing.assert_allclose(
-            hydraulic.Re_heating, _REF_RE_HEAT, rtol=0.01,
+            hydraulic.reynolds_numbers_heating, _REF_RE_HEAT, rtol=0.01,
             err_msg="Heating Reynolds numbers differ from reference",
         )
 
     def test_reynolds_cooling(self, bhe_dimensioning):
         hydraulic, _ = bhe_dimensioning
         np.testing.assert_allclose(
-            hydraulic.Re_cooling, _REF_RE_COOL, rtol=0.01,
+            hydraulic.reynolds_numbers_cooling, _REF_RE_COOL, rtol=0.01,
             err_msg="Cooling Reynolds numbers differ from reference",
         )
 
@@ -215,17 +215,17 @@ class TestBHEThermalDimensioning:
 
     def test_system_temperature_heating_annual(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        T = result.sys_temps.T_avg_heat_annual_C
+        T = result.sys_temps.system_mean_annual_temperature_heating
         assert abs(T - 3.54) < 0.05
 
     def test_system_temperature_heating_winter(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        T = result.sys_temps.T_avg_heat_winter_C
+        T = result.sys_temps.system_mean_winter_temperature_heating
         assert abs(T - (-0.41)) < 0.05
 
     def test_system_temperature_heating_peak(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        T = result.sys_temps.T_avg_heat_peak_C
+        T = result.sys_temps.system_mean_peak_temperature_heating
         assert abs(T - (-2.59)) < 0.05
 
     def test_bhe_pressure_drop_heating(self, bhe_dimensioning):

@@ -20,27 +20,34 @@ class PipeGroup:
     Fysisk og hydraulisk input for én rørgruppe.
     Alle størrelser i SI.
     """
-    ID: int
-    L_m: float
-    Di_m: float
-    Do_m: float
-    Re: float
-    k_pipe_W_mK: float
-    burial_depth_m: float
+    id_: int
+    length: float                       # [m]
+    inner_diameter: float               # [m]
+    outer_diameter: float               # [m]
+    reynolds_number: float
+    pipe_thermal_conductivity: float    # [W/m/K]
+    burial_depth: float                 # [m]
     n_parallel_pipes: int
     n_traces: int
-    pipe_spacing_m: float | None = None
+    pipe_spacing: float | None = None   # [m]
 
 
 @dataclass(frozen=True)
 class ModeInput:
     """
     Input for én driftstilstand, fx heating eller cooling.
+
+    temperature_heat_pump_inlet : float
+        Brine temperature at the heat pump inlet — the design limit temperature
+        (minimum for heating, maximum for cooling) [°C].
+    temperature_heat_pump_outlet : float
+        Brine temperature at the heat pump outlet — more extreme than the inlet
+        by the heat pump delta-T (lower for heating, higher for cooling) [°C].
     """
     times_s: np.ndarray
     powers_W: np.ndarray
-    Ti_C: float
-    To_C: float
+    temperature_heat_pump_inlet: float   # [°C]
+    temperature_heat_pump_outlet: float  # [°C]
 
 
 @dataclass(frozen=True)
@@ -51,8 +58,8 @@ class DistributionPipeModel:
     brine: HeatCarrier
     soil: Soil
 
-    T0_C: float
-    surface_amp_C: float
+    undisturbed_ground_temperature: float   # [°C]
+    surface_temperature_amplitude: float    # [°C]
 
     pipe_groups: list[PipeGroup]
 
@@ -93,27 +100,27 @@ def _validate_mode_input(mode_input: ModeInput, mode_name: str) -> tuple[np.ndar
 
 
 def _validate_pipe_group(pg: PipeGroup) -> None:
-    if pg.L_m <= 0:
-        raise ValueError(f"PipeGroup ID={pg.ID}: L_m must be > 0")
-    if pg.Di_m <= 0 or pg.Do_m <= 0:
-        raise ValueError(f"PipeGroup ID={pg.ID}: Di_m and Do_m must be > 0")
-    if pg.Do_m < pg.Di_m:
-        raise ValueError(f"PipeGroup ID={pg.ID}: Do_m must be >= Di_m")
-    if pg.burial_depth_m < 0:
-        raise ValueError(f"PipeGroup ID={pg.ID}: burial_depth_m must be >= 0")
+    if pg.length <= 0:
+        raise ValueError(f"PipeGroup ID={pg.id_}: length must be > 0")
+    if pg.inner_diameter <= 0 or pg.outer_diameter <= 0:
+        raise ValueError(f"PipeGroup ID={pg.id_}: inner_diameter and outer_diameter must be > 0")
+    if pg.outer_diameter < pg.inner_diameter:
+        raise ValueError(f"PipeGroup ID={pg.id_}: outer_diameter must be >= inner_diameter")
+    if pg.burial_depth < 0:
+        raise ValueError(f"PipeGroup ID={pg.id_}: burial_depth must be >= 0")
     if pg.n_parallel_pipes not in (1, 2):
         raise ValueError(
-            f"PipeGroup ID={pg.ID}: only one- and two-pipe systems are supported "
+            f"PipeGroup ID={pg.id_}: only one- and two-pipe systems are supported "
             f"(n_parallel_pipes must be 1 or 2)"
         )
     if pg.n_traces <= 0:
-        raise ValueError(f"PipeGroup ID={pg.ID}: n_traces must be > 0")
-    if pg.n_parallel_pipes == 2 and pg.pipe_spacing_m is None:
+        raise ValueError(f"PipeGroup ID={pg.id_}: n_traces must be > 0")
+    if pg.n_parallel_pipes == 2 and pg.pipe_spacing is None:
         raise ValueError(
-            f"PipeGroup ID={pg.ID}: pipe_spacing_m must be set when n_parallel_pipes == 2"
+            f"PipeGroup ID={pg.id_}: pipe_spacing must be set when n_parallel_pipes == 2"
         )
-    if pg.pipe_spacing_m is not None and pg.pipe_spacing_m <= 0:
-        raise ValueError(f"PipeGroup ID={pg.ID}: pipe_spacing_m must be > 0 when provided")
+    if pg.pipe_spacing is not None and pg.pipe_spacing <= 0:
+        raise ValueError(f"PipeGroup ID={pg.id_}: pipe_spacing must be > 0 when provided")
 
 
 def _validate_model(model: DistributionPipeModel) -> None:
@@ -265,8 +272,8 @@ def _compute_mode(
 
     dP = _delta_p(powers_W)
 
-    Ti_C = float(mode_input.Ti_C)
-    To_C = float(mode_input.To_C)
+    Ti_C = float(mode_input.temperature_heat_pump_inlet)
+    To_C = float(mode_input.temperature_heat_pump_outlet)
     Tm_C = 0.5 * (Ti_C + To_C)
 
     n_groups = len(model.pipe_groups)
@@ -279,40 +286,40 @@ def _compute_mode(
 
     for i, pg in enumerate(model.pipe_groups):
         TP_C = _temp_penalty_at_depth(
-            surface_amp_C=model.surface_amp_C,
-            depth_m=pg.burial_depth_m,
+            surface_amp_C=model.surface_temperature_amplitude,
+            depth_m=pg.burial_depth,
             diffusivity_m2_s=a_s,
         )
 
         R_pipe = pipe_thermal_resistance(
-            Di=float(pg.Di_m),
-            Do=float(pg.Do_m),
-            Re=float(pg.Re),
+            Di=float(pg.inner_diameter),
+            Do=float(pg.outer_diameter),
+            Re=float(pg.reynolds_number),
             Pr=float(Pr),
             k_fluid=float(model.brine.thermal_conductivity),
-            k_pipe=float(pg.k_pipe_W_mK),
+            k_pipe=float(pg.pipe_thermal_conductivity),
         )
 
         K1 = _bundle_k1(
             diffusivity_m2_s=a_s,
             times_s=times_s,
-            depth_m=pg.burial_depth_m,
+            depth_m=pg.burial_depth,
             n_parallel_pipes=pg.n_parallel_pipes,
-            spacing_m=pg.pipe_spacing_m,
+            spacing_m=pg.pipe_spacing,
         )
 
         G_grid = csm(
-            float(pg.Do_m) / 2.0,
-            float(pg.Do_m) / 2.0,
+            float(pg.outer_diameter) / 2.0,
+            float(pg.outer_diameter) / 2.0,
             times_s,
             a_s,
         ) + K1
 
-        kernel = ((G_grid / k_s) + R_pipe) / float(pg.L_m) / float(pg.n_traces)
+        kernel = ((G_grid / k_s) + R_pipe) / float(pg.length) / float(pg.n_traces)
         denom = float(np.dot(dP, kernel))
 
         numerator, tp_sign = _mode_numerator(
-            T0_C=float(model.T0_C),
+            T0_C=float(model.undisturbed_ground_temperature),
             Tm_C=Tm_C,
             TP_C=TP_C,
             mode=mode,
@@ -321,9 +328,9 @@ def _compute_mode(
         F_i = float(numerator / denom)
         F_per_group[i] = F_i
 
-        T_seq_C = float(model.T0_C) + tp_sign * TP_C - F_i * np.cumsum(dP * kernel)
-     
-        volume_m3 = float(pg.n_traces) * float(pg.L_m) * math.pi * float(pg.Di_m) ** 2 / 4.0
+        T_seq_C = float(model.undisturbed_ground_temperature) + tp_sign * TP_C - F_i * np.cumsum(dP * kernel)
+
+        volume_m3 = float(pg.n_traces) * float(pg.length) * math.pi * float(pg.inner_diameter) ** 2 / 4.0
         total_volume_m3 += volume_m3
         T_volume_weighted[i, :] = T_seq_C * volume_m3
 

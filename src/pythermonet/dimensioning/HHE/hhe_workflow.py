@@ -112,9 +112,9 @@ def run_hhe_sizing_workflow(
     pipe_infrastructure : PipeInfrastructure
         Raw HHE definition — used for volume calculation.
     """
-    P_heat_full = np.asarray(ground_loads.heating_ground_load_W, dtype=float)
+    P_heat_full = np.asarray(ground_loads.ground_load_heating, dtype=float)
     P_cool_full = (
-        np.asarray(ground_loads.cooling_ground_load_W, dtype=float)
+        np.asarray(ground_loads.ground_load_cooling, dtype=float)
         if ground_loads.has_cooling else None
     )
 
@@ -129,9 +129,9 @@ def run_hhe_sizing_workflow(
     if P_cool_full is not None:
         P_heat_full, P_cool_full = apply_annual_balance(P_heat_full, P_cool_full)
 
-    times_heat_s = sizing.times_s_peak_heating(ground_loads.peak_heating_h)
+    times_heat_s = sizing.times_s_peak_heating(ground_loads.peak_hours_heating)
     times_cool_s = (
-        sizing.times_s_peak_cooling(ground_loads.peak_cooling_h)
+        sizing.times_s_peak_cooling(ground_loads.peak_hours_cooling)
         if ground_loads.has_cooling else None
     )
 
@@ -154,23 +154,23 @@ def run_hhe_sizing_workflow(
         if ground_loads.has_cooling else None
     )
 
-    n_pipes = pipe_infrastructure.NParallelPipes
+    n_pipes = pipe_infrastructure.n_parallel_pipes
     n_loops = n_pipes // 2  # each loop = one outgoing + one return pipe
 
     # Size pipe length
     sizing = size_ground_field_length_heating_cooling(
-        T_fluid_min=T_brine_min_heat - 0.5 * ground_loads.deltaT_sys_heat,
+        T_fluid_min=T_brine_min_heat - 0.5 * ground_loads.flow_weighted_brine_delta_temperature_heating,
         P_heating_W=P_heating,
         times_heat_s=times_heat_s,
-        T_fluid_max=T_brine_max_cool + (0.5 * ground_loads.deltaT_sys_cool if ground_loads.has_cooling else 0.0),
+        T_fluid_max=T_brine_max_cool + (0.5 * ground_loads.flow_weighted_brine_delta_temperature_cooling if ground_loads.has_cooling else 0.0),
         P_cooling_W=P_cooling,
         times_cool_s=times_cool_s,
         field=hhe_field,
         brine=brine,
         soil=soil,
-        m_dot_per_element_heat=ground_loads.aggregated_mdot_peak_heat_kg_s / n_loops,
+        m_dot_per_element_heat=ground_loads.summed_peak_mass_flow_heating / n_loops,
         m_dot_per_element_cool=(
-            ground_loads.aggregated_mdot_peak_cool_kg_s / n_loops
+            ground_loads.summed_peak_mass_flow_cooling / n_loops
             if ground_loads.has_cooling else None
         ),
         pre_balanced=True,  # no annual balance for HHE (HFLS already models surface reset)
@@ -178,7 +178,7 @@ def run_hhe_sizing_workflow(
 
     L = sizing.L_m
     alpha_heat = hhe_field.k_s_eff_heating(soil) / (float(soil.density) * float(soil.specific_heat))
-    m_dot_heat = ground_loads.aggregated_mdot_peak_heat_kg_s / n_loops
+    m_dot_heat = ground_loads.summed_peak_mass_flow_heating / n_loops
 
     # HHE temperatures at each pulse (heating)
     g_heat = hhe_field.compute_gfunction(L, np.asarray(times_heat_s, dtype=float), alpha_heat)
@@ -191,7 +191,7 @@ def run_hhe_sizing_workflow(
     T_c_ann = T_c_win = T_c_peak = None
     if ground_loads.has_cooling:
         alpha_cool = hhe_field.k_s_eff_cooling(soil) / (float(soil.density) * float(soil.specific_heat))
-        m_dot_cool = ground_loads.aggregated_mdot_peak_cool_kg_s / n_loops
+        m_dot_cool = ground_loads.summed_peak_mass_flow_cooling / n_loops
         g_cool = hhe_field.compute_gfunction(L, np.asarray(times_cool_s, dtype=float), alpha_cool)
         R_cool = hhe_field.R_at_L(L, m_dot_cool, brine, soil)
         T_c_ann, T_c_win, T_c_peak = _hhe_mean_temperatures(
@@ -199,16 +199,16 @@ def run_hhe_sizing_workflow(
         )
 
     # Volume-weighted system temperatures
-    seg = pipe_infrastructure.traceSegments[0]
+    seg = pipe_infrastructure.trace_segments[0]
     Di_hhe = float(seg.outer_diameter) * (1.0 - 2.0 / float(seg.sdr))
     V_hhe = n_pipes * (math.pi / 4.0) * Di_hhe ** 2 * L
 
     network = hydraulic.network
-    n_parallel = int(network.infrastructure.NParallelPipes)
-    L_traces = np.asarray(network.L_traces, dtype=float)
-    N_traces = np.asarray(network.N_traces, dtype=int)
+    n_parallel = int(network.infrastructure.n_parallel_pipes)
+    trace_lengths = np.asarray(network.trace_lengths, dtype=float)
+    trace_counts = np.asarray(network.trace_counts, dtype=int)
     V_dist = float(
-        np.sum(N_traces * n_parallel * L_traces * (math.pi / 4.0) * hydraulic.inner_diameter ** 2)
+        np.sum(trace_counts * n_parallel * trace_lengths * (math.pi / 4.0) * hydraulic.pipe_inner_diameters ** 2)
     )
     V_total = V_hhe + V_dist
 
@@ -228,12 +228,12 @@ def run_hhe_sizing_workflow(
         T_avg_cool_peak   = _weighted(T_c_peak, T_dc[2])
 
     # HHE pressure drop (full loop = out + return = 2 × L)
-    Q_per_loop_heat = ground_loads.aggregated_mdot_peak_heat_kg_s / (n_loops * brine.density)
+    Q_per_loop_heat = ground_loads.summed_peak_mass_flow_heating / (n_loops * brine.density)
     hhe_dp_heat_Pa = float(_dp_per_m(brine.density, brine.dynamic_viscosity, Q_per_loop_heat, Di_hhe)) * 2.0 * L
 
     hhe_dp_cool_Pa: float | None = None
     if ground_loads.has_cooling:
-        Q_per_loop_cool = ground_loads.aggregated_mdot_peak_cool_kg_s / (n_loops * brine.density)
+        Q_per_loop_cool = ground_loads.summed_peak_mass_flow_cooling / (n_loops * brine.density)
         hhe_dp_cool_Pa = float(_dp_per_m(brine.density, brine.dynamic_viscosity, Q_per_loop_cool, Di_hhe)) * 2.0 * L
 
     return HHEWorkflowResult(
@@ -273,25 +273,25 @@ def print_hhe_results(result: HHEWorkflowResult, pipe_infrastructure: PipeInfras
     sizing       = result.sizing
     has_cooling  = result.P_hhe_cooling_W is not None
     network      = hydraulic.network
-    n_traces     = len(hydraulic.outer_diameter)
+    n_traces     = len(hydraulic.pipe_outer_diameters)
 
     # ── velocities and dp/m per trace ──────────────────────────────────────
-    A = _math.pi * hydraulic.inner_diameter ** 2 / 4.0
-    v_heat = hydraulic.m3_s_heating / A
+    A = _math.pi * hydraulic.pipe_inner_diameters ** 2 / 4.0
+    v_heat = hydraulic.peak_volume_flow_rate_heating / A
     dp_m_heat = np.array([
         float(_dp_per_m2(brine.density, brine.dynamic_viscosity,
-                         float(hydraulic.m3_s_heating[i]),
-                         float(hydraulic.inner_diameter[i])))
+                         float(hydraulic.peak_volume_flow_rate_heating[i]),
+                         float(hydraulic.pipe_inner_diameters[i])))
         for i in range(n_traces)
     ])
 
-    has_cool_hydro = has_cooling and hydraulic.m3_s_cooling is not None
+    has_cool_hydro = has_cooling and hydraulic.peak_volume_flow_rate_cooling is not None
     if has_cool_hydro:
-        v_cool = hydraulic.m3_s_cooling / A
+        v_cool = hydraulic.peak_volume_flow_rate_cooling / A
         dp_m_cool = np.array([
             float(_dp_per_m2(brine.density, brine.dynamic_viscosity,
-                             float(hydraulic.m3_s_cooling[i]),
-                             float(hydraulic.inner_diameter[i])))
+                             float(hydraulic.peak_volume_flow_rate_cooling[i]),
+                             float(hydraulic.pipe_inner_diameters[i])))
             for i in range(n_traces)
         ])
     else:
@@ -329,16 +329,16 @@ def print_hhe_results(result: HHEWorkflowResult, pipe_infrastructure: PipeInfras
             name = name[:TC - 5] + '...'
         cells = [
             _cell(name, TC, 'l'),
-            _cell(f'{hydraulic.outer_diameter[i] * 1000:.1f}', DC),
-            _cell(f'{hydraulic.inner_diameter[i] * 1000:.1f}', DC),
+            _cell(f'{hydraulic.pipe_outer_diameters[i] * 1000:.1f}', DC),
+            _cell(f'{hydraulic.pipe_inner_diameters[i] * 1000:.1f}', DC),
             _cell(f'{v_heat[i]:.3f}', VC),
-            _cell(f'{hydraulic.Re_heating[i]:,.0f}', RC),
+            _cell(f'{hydraulic.reynolds_numbers_heating[i]:,.0f}', RC),
             _cell(f'{dp_m_heat[i]:.1f}', PC),
         ]
         if has_cool_hydro:
             cells += [
                 _cell(f'{v_cool[i]:.3f}', VC),
-                _cell(f'{hydraulic.Re_cooling[i]:,.0f}', RC),
+                _cell(f'{hydraulic.reynolds_numbers_cooling[i]:,.0f}', RC),
                 _cell(f'{dp_m_cool[i]:.1f}', PC),
             ]
         return '│' + '│'.join(cells) + '│'
@@ -352,7 +352,7 @@ def print_hhe_results(result: HHEWorkflowResult, pipe_infrastructure: PipeInfras
     print(_border('└', '┴', '┘'))
 
     # ── HHE sizing + pressure drop ─────────────────────────────────────────
-    seg = pipe_infrastructure.traceSegments[0]
+    seg = pipe_infrastructure.trace_segments[0]
     Di_hhe = float(seg.outer_diameter) * (1.0 - 2.0 / float(seg.sdr))
     print()
     print(f'  HHE loop length  :  {2.0 * sizing.L_m:.2f} m  (governed by {sizing.governing})')
@@ -361,8 +361,8 @@ def print_hhe_results(result: HHEWorkflowResult, pipe_infrastructure: PipeInfras
         print(f'  Dist. fraction   :  {result.dist_thermal_cool.F_total * 100:.1f} %  (cooling, distribution grid)')
     print(f'  HHE Do / Di      :  {float(seg.outer_diameter)*1000:.1f} mm / {Di_hhe*1000:.1f} mm  '
           f'(sdr {float(seg.sdr):.0f})')
-    print(f'  N parallel pipes :  {pipe_infrastructure.NParallelPipes}')
-    print(f'  Burial depth     :  {float(pipe_infrastructure.burialDepth):.2f} m')
+    print(f'  N parallel pipes :  {pipe_infrastructure.n_parallel_pipes}')
+    print(f'  Burial depth     :  {float(pipe_infrastructure.burial_depth):.2f} m')
     hhe_dp_m_heat = result.hhe_dp_heat_Pa / (2.0 * sizing.L_m)
     print(f'  HHE ΔP (heating) :  {result.hhe_dp_heat_Pa:,.0f} Pa  |  {hhe_dp_m_heat:.1f} Pa/m')
     if result.hhe_dp_cool_Pa is not None:

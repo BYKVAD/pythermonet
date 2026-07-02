@@ -82,8 +82,8 @@ def read_dimensioned_topology_tsv_to_hydraulic(
     trace_names = df["Section"].astype(str).str.strip().to_list()
     do_m        = df["do_(mm)"].astype(float).to_numpy() / 1000.0
     sdr         = df["SDR"].astype(float).to_numpy()
-    L_traces    = df["Trace_(m)"].astype(float).to_numpy()
-    N_traces    = df["Number_of_traces"].astype(int).to_numpy()
+    trace_lengths    = df["Trace_(m)"].astype(float).to_numpy()
+    trace_counts    = df["Number_of_traces"].astype(int).to_numpy()
     q_heat      = df["Peak_flow_heating_m3/s"].astype(float).to_numpy()
 
     di_m = do_m * (1.0 - 2.0 / sdr)
@@ -95,27 +95,27 @@ def read_dimensioned_topology_tsv_to_hydraulic(
             outer_diameter=float(do_m[i]),
             sdr=float(sdr[i]),
             material=pipe_material,
-            roughnessHeight=0.0,   # not needed — pipes already sized
-            ID=int(i),
-            length=float(L_traces[i] * n_parallel_pipes),
+            roughness=0.0,   # not needed — pipes already sized
+            id_=int(i),
+            length=float(trace_lengths[i] * n_parallel_pipes),
         )
         trace_segments.append(seg)
 
     infrastructure = PipeInfrastructure(
-        NParallelPipes=int(n_parallel_pipes),
-        traceSegments=trace_segments,
-        pipeDistance=pipe_distance,
-        burialDepth=float(burial_depth),
+        n_parallel_pipes=int(n_parallel_pipes),
+        trace_segments=trace_segments,
+        pipe_distance=pipe_distance,
+        burial_depth=float(burial_depth),
     )
 
     network = DistributionNetwork(
         infrastructure=infrastructure,
         trace_names=trace_names,
-        hp_id_trace=[np.array([], dtype=int)] * n,
-        max_pressure_loss_trace=np.full(n, np.nan),
+        heat_pump_id_trace=[np.array([], dtype=int)] * n,
+        trace_max_pressure_loss=np.full(n, np.nan),
         sdr=sdr,
-        L_traces=L_traces,
-        N_traces=N_traces,
+        trace_lengths=trace_lengths,
+        trace_counts=trace_counts,
     )
 
     # --- Reynolds numbers ---
@@ -140,15 +140,15 @@ def read_dimensioned_topology_tsv_to_hydraulic(
 
     hydraulic = HydraulicResult(
         network=network,
-        outer_diameter=do_m,
-        inner_diameter=di_m,
+        pipe_outer_diameters=do_m,
+        pipe_inner_diameters=di_m,
         governing_mode=np.full(n, "heating", dtype=object),
-        m3_s_heating=q_heat,
-        m3_s_cooling=q_cool,
-        Re_heating=Re_heat,
-        Re_cooling=Re_cool,
-        dp_heating=np.full(n, np.nan),
-        dp_cooling=np.full(n, np.nan) if has_cooling else None,
+        peak_volume_flow_rate_heating=q_heat,
+        peak_volume_flow_rate_cooling=q_cool,
+        reynolds_numbers_heating=Re_heat,
+        reynolds_numbers_cooling=Re_cool,
+        pressure_losses_heating=np.full(n, np.nan),
+        pressure_losses_cooling=np.full(n, np.nan) if has_cooling else None,
     )
 
     return network, hydraulic

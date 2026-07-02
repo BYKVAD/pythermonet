@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["matplotlib>=3.9,<4"]
+dev = ["matplotlib>=3.9,<4", "pytest>=8.0,<9", "pip-tools>=7.0,<8"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

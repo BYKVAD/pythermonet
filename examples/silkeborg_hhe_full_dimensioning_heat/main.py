@@ -73,22 +73,22 @@ hhe_segment = PipeSegment(
     outer_diameter=0.040,   # 40 mm OD
     sdr=17.0,
     material=hhe_pipe_material,
-    roughnessHeight=1e-6,
-    ID=0,
+    roughness=1e-6,
+    id_=0,
     length=100.0,           # placeholder — will be sized
 )
 
 pipe_infrastructure = PipeInfrastructure(
-    NParallelPipes=20,      # 10 loops (outgoing + return)
-    traceSegments=[hhe_segment],
-    pipeDistance=1.5,       # lateral spacing between pipes [m]
-    burialDepth=1.2,        # m
+    n_parallel_pipes=20,      # 10 loops (outgoing + return)
+    trace_segments=[hhe_segment],
+    pipe_distance=1.5,       # lateral spacing between pipes [m]
+    burial_depth=1.2,        # m
 )
 
 hhe_field = HHEGroundField(
     pipe_infrastructure=pipe_infrastructure,
-    k_s=float(soil.thermal_conductivity_shallow_heating),
-    k_s_cooling=float(soil.thermal_conductivity_shallow_cooling),
+    soil_thermal_conductivity_heating=float(soil.thermal_conductivity_shallow_heating),
+    soil_thermal_conductivity_cooling=float(soil.thermal_conductivity_shallow_cooling),
 )
 
 # -----------------------------------------------------------------------------
@@ -101,11 +101,11 @@ loads = ground_loads_from_district(
     brine,
     f_peak_heating=1.0,
     f_peak_cooling=1.0,
-    peak_heating_h=4.0,
-    peak_cooling_h=4.0,
+    peak_hours_heating=4.0,
+    peak_hours_cooling=4.0,
 )
 
-sizing = SizingParameters(time_horizon_years=30.0)
+sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
 
 # -----------------------------------------------------------------------------
 # 5) Brine temperature limits

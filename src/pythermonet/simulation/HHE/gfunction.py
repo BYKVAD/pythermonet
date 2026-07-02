@@ -5,7 +5,7 @@ G-function assembly for a PipeInfrastructure (horizontal ground loop).
 
 Equal load distribution
 -----------------------
-All NParallelPipes pipes carry the same heat extraction rate per unit length
+All n_parallel_pipes pipes carry the same heat extraction rate per unit length
 q' (W/m). The g-function is therefore scalar:
 
     g(t) = 2*pi*k_s * DeltaT_avg / q'
@@ -80,12 +80,12 @@ class HHEGFunction:
         self.gFunc: Optional[np.ndarray] = None
         self._time: Optional[np.ndarray] = None
 
-        self._n_pipes = pipe_infrastructure.NParallelPipes
-        self._n_seg = len(pipe_infrastructure.traceSegments)
+        self._n_pipes = pipe_infrastructure.n_parallel_pipes
+        self._n_seg = len(pipe_infrastructure.trace_segments)
         self._n_total = self._n_pipes * self._n_seg
-        self._depth = float(pipe_infrastructure.burialDepth)
-        self._pipe_dist = float(pipe_infrastructure.pipeDistance or 0.0)
-        self._trace = pipe_infrastructure.traceSegments
+        self._depth = float(pipe_infrastructure.burial_depth)
+        self._pipe_dist = float(pipe_infrastructure.pipe_distance or 0.0)
+        self._trace = pipe_infrastructure.trace_segments
         self._r_pipe = float(self._trace[0].outer_diameter / 2.0) if self._trace[0].outer_diameter is not None else 0.0
 
         if time is not None:

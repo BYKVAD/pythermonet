@@ -5,4 +5,4 @@ from .material import Material
 @dataclass
 class Pipe(Annulus):
     material: Material
-    roughnessHeight: float       # m
+    roughness: float       # m

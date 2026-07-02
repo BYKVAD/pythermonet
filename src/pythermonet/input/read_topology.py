@@ -40,7 +40,7 @@ def read_undimensioned_topology_tsv_to_network(
     path: str | Path,
     *,
     pipe_material: Material,
-    roughness_height: float,
+    roughness: float,
     burial_depth: float,
     pipe_distance: float | None,
     n_parallel_pipes: int | None,
@@ -48,7 +48,7 @@ def read_undimensioned_topology_tsv_to_network(
     """
     Læser undimensioneret topologi og bygger et samlet DistributionNetwork.
 
-    - PipeInfrastructure.traceSegments oprettes med outer_diameter=np.nan
+    - PipeInfrastructure.trace_segments oprettes med outer_diameter=np.nan
       (diameter sættes senere af pipe-dimensionering).
     - Topologi/dimensioneringsfelter lagres på DistributionNetwork.
     """
@@ -66,12 +66,12 @@ def read_undimensioned_topology_tsv_to_network(
     # Parse arrays
     trace_names = df["Section"].astype(str).str.strip().to_list()
     sdr = df["SDR"].astype(float).to_numpy()
-    L_traces = df["Trace_(m)"].astype(float).to_numpy()
-    N_traces = df["Number_of_traces"].astype(int).to_numpy()
-    max_pressure_loss_trace = df["Max_pressure_loss_(Pa)"].astype(float).to_numpy()
+    trace_lengths = df["Trace_(m)"].astype(float).to_numpy()
+    trace_counts = df["Number_of_traces"].astype(int).to_numpy()
+    trace_max_pressure_loss = df["Max_pressure_loss_(Pa)"].astype(float).to_numpy()
 
     # HP grupper
-    hp_id_trace = [_parse_hp_id_vector(x) for x in df["HP_ID_vector"].to_list()]
+    heat_pump_id_trace = [_parse_hp_id_vector(x) for x in df["HP_ID_vector"].to_list()]
 
     # Byg fysisk infrastruktur (segments 1:1 med pipe groups)
     trace_segments: list[PipeSegment] = []
@@ -80,25 +80,25 @@ def read_undimensioned_topology_tsv_to_network(
             outer_diameter=np.nan,          # udfyldes efter dimensionering
             sdr=float(sdr[i]),
             material=pipe_material,
-            roughnessHeight=float(roughness_height),
-            ID=int(i),
-            length=float(L_traces[i] * n_parallel_pipes),  # The number of parallel pipes multiplied by the number of traces 
+            roughness=float(roughness),
+            id_=int(i),
+            length=float(trace_lengths[i] * n_parallel_pipes),  # The number of parallel pipes multiplied by the number of traces 
         )
         trace_segments.append(seg)
 
     infrastructure = PipeInfrastructure(
-        NParallelPipes=int(n_parallel_pipes),
-        traceSegments=trace_segments,
-        pipeDistance=pipe_distance,
-        burialDepth=float(burial_depth),
+        n_parallel_pipes=int(n_parallel_pipes),
+        trace_segments=trace_segments,
+        pipe_distance=pipe_distance,
+        burial_depth=float(burial_depth),
     )
 
     return DistributionNetwork(
         infrastructure=infrastructure,
         trace_names=trace_names,
-        hp_id_trace=hp_id_trace,
-        max_pressure_loss_trace=max_pressure_loss_trace,
+        heat_pump_id_trace=heat_pump_id_trace,
+        trace_max_pressure_loss=trace_max_pressure_loss,
         sdr=sdr,
-        L_traces=L_traces,
-        N_traces=N_traces,
+        trace_lengths=trace_lengths,
+        trace_counts=trace_counts,
     )

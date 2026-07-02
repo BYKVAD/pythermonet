@@ -23,19 +23,19 @@ class GroundLoads:
     Arrays are ordered [annual, seasonal, peak] (the three-pulse convention).
     """
 
-    heating_ground_load_W: np.ndarray           # [W] (3,): annual, winter, peak
-    cooling_ground_load_W: Optional[np.ndarray] # [W] (3,) or None
+    ground_load_heating: np.ndarray           # [W] (3,): annual, winter, peak
+    ground_load_cooling: Optional[np.ndarray] # [W] (3,) or None
 
     has_cooling: bool
 
-    peak_heating_h: float
-    peak_cooling_h: Optional[float]
+    peak_hours_heating: float
+    peak_hours_cooling: Optional[float]
 
-    deltaT_sys_heat: float                      # [K] flow-weighted brine ΔT, heating
-    deltaT_sys_cool: Optional[float]            # [K] or None
+    flow_weighted_brine_delta_temperature_heating: float                      # [K] flow-weighted brine ΔT, heating
+    flow_weighted_brine_delta_temperature_cooling: Optional[float]            # [K] or None
 
-    aggregated_mdot_peak_heat_kg_s: float       # [kg/s] total peak mass flow, heating
-    aggregated_mdot_peak_cool_kg_s: Optional[float]  # [kg/s] or None
+    summed_peak_mass_flow_heating: float       # [kg/s] total peak mass flow, heating
+    summed_peak_mass_flow_cooling: Optional[float]  # [kg/s] or None
 
 
 # ---------------------------------------------------------------------------
@@ -62,8 +62,8 @@ def ground_loads_from_heat_pumps(
     hp_list,
     brine: HeatCarrier,
     *,
-    peak_heating_h: float = 4.0,
-    peak_cooling_h: Optional[float] = 4.0,
+    peak_hours_heating: float = 4.0,
+    peak_hours_cooling: Optional[float] = 4.0,
     peak_fraction_heating_mode: PeakSupplyMode = "incremental",
     peak_fraction_heating: float = 1.0,
     peak_fraction_cooling_mode: PeakSupplyMode = "incremental",
@@ -77,10 +77,10 @@ def ground_loads_from_heat_pumps(
     n = len(hp_list)
     if n <= 0:
         raise ValueError("hp_list must contain at least one HeatPump")
-    if peak_heating_h <= 0:
-        raise ValueError("peak_heating_h must be > 0")
-    if peak_cooling_h is not None and peak_cooling_h <= 0:
-        raise ValueError("peak_cooling_h must be > 0 when provided")
+    if peak_hours_heating <= 0:
+        raise ValueError("peak_hours_heating must be > 0")
+    if peak_hours_cooling is not None and peak_hours_cooling <= 0:
+        raise ValueError("peak_hours_cooling must be > 0 when provided")
     if not (0.0 <= peak_fraction_heating <= 1.0):
         raise ValueError("peak_fraction_heating must be in [0, 1]")
     if not (0.0 <= peak_fraction_cooling <= 1.0):
@@ -94,73 +94,73 @@ def ground_loads_from_heat_pumps(
     f = float(diversity_factor_from_n_heat_pumps(n))
 
     # --- Heating loads ---
-    P_year = float(sum(hp.annualHeating_ground_load for hp in hp_list))
-    P_wint = float(sum(hp.winterHeating_ground_load for hp in hp_list))
-    P_peak_raw = float(sum(hp.peakHeating_ground_load for hp in hp_list))
+    P_year = float(sum(hp.annual_ground_load_heating for hp in hp_list))
+    P_wint = float(sum(hp.winter_ground_load_heating for hp in hp_list))
+    P_peak_raw = float(sum(hp.peak_ground_load_heating for hp in hp_list))
     P_peak_div = f * P_peak_raw
     P_peak_eff = _apply_peak_fraction(
         P_base=P_wint, P_peak=P_peak_div,
         mode=peak_fraction_heating_mode, alpha=peak_fraction_heating,
     )
-    heating_ground_load_W = np.asarray([P_year, P_wint, P_peak_eff], dtype=float)
+    ground_load_heating = np.asarray([P_year, P_wint, P_peak_eff], dtype=float)
 
     # --- Heating peak flow + system ΔT ---
     sum_mdot_raw = 0.0
     sum_mdot_dT = 0.0
     for hp in hp_list:
-        dT = float(hp.deltaTHeating)
+        dT = float(hp.delta_temperature_heating)
         if dT <= 0:
-            raise ValueError(f"HeatPump ID={hp.ID}: deltaTHeating must be > 0")
-        mdot = float(hp.peakHeating_ground_load) / (cp * dT)
+            raise ValueError(f"HeatPump ID={hp.id_}: delta_temperature_heating must be > 0")
+        mdot = float(hp.peak_ground_load_heating) / (cp * dT)
         sum_mdot_raw += mdot
         sum_mdot_dT += mdot * dT
 
     if sum_mdot_raw <= 0.0:
         raise ValueError("Sum of peak heating mass flow must be > 0")
 
-    deltaT_sys_heat = float(sum_mdot_dT / sum_mdot_raw)
+    flow_weighted_brine_delta_temperature_heating = float(sum_mdot_dT / sum_mdot_raw)
     scale_H = 0.0 if P_peak_div == 0.0 else (P_peak_eff / P_peak_div)
-    aggregated_mdot_peak_heat_kg_s = float(scale_H * f * sum_mdot_raw)
+    summed_peak_mass_flow_heating = float(scale_H * f * sum_mdot_raw)
 
     # --- Cooling detection ---
-    P_peak_c_raw = float(sum(abs(float(hp.peakCooling_ground_load)) for hp in hp_list))
+    P_peak_c_raw = float(sum(abs(float(hp.peak_ground_load_cooling)) for hp in hp_list))
     if np.isclose(P_peak_c_raw, 0.0, atol=1.0):
         return GroundLoads(
-            heating_ground_load_W=heating_ground_load_W,
-            cooling_ground_load_W=None,
+            ground_load_heating=ground_load_heating,
+            ground_load_cooling=None,
             has_cooling=False,
-            peak_heating_h=peak_heating_h,
-            peak_cooling_h=peak_cooling_h,
-            deltaT_sys_heat=deltaT_sys_heat,
-            deltaT_sys_cool=None,
-            aggregated_mdot_peak_heat_kg_s=aggregated_mdot_peak_heat_kg_s,
-            aggregated_mdot_peak_cool_kg_s=None,
+            peak_hours_heating=peak_hours_heating,
+            peak_hours_cooling=peak_hours_cooling,
+            flow_weighted_brine_delta_temperature_heating=flow_weighted_brine_delta_temperature_heating,
+            flow_weighted_brine_delta_temperature_cooling=None,
+            summed_peak_mass_flow_heating=summed_peak_mass_flow_heating,
+            summed_peak_mass_flow_cooling=None,
         )
 
     # --- Cooling loads ---
-    P_year_c = float(sum(abs(float(hp.annualCooling_ground_load)) for hp in hp_list))
-    P_summ_c = float(sum(abs(float(hp.summerCooling_ground_load)) for hp in hp_list))
+    P_year_c = float(sum(abs(float(hp.annual_ground_load_cooling)) for hp in hp_list))
+    P_summ_c = float(sum(abs(float(hp.summer_ground_load_cooling)) for hp in hp_list))
     P_peak_c_div = f * P_peak_c_raw
-    if peak_cooling_h is None:
+    if peak_hours_cooling is None:
         P_peak_c_eff = P_summ_c
     else:
         P_peak_c_eff = _apply_peak_fraction(
             P_base=P_summ_c, P_peak=P_peak_c_div,
             mode=peak_fraction_cooling_mode, alpha=peak_fraction_cooling,
         )
-    cooling_ground_load_W = np.asarray([P_year_c, P_summ_c, P_peak_c_eff], dtype=float)
+    ground_load_cooling = np.asarray([P_year_c, P_summ_c, P_peak_c_eff], dtype=float)
 
     # --- Cooling peak flow + system ΔT ---
     sum_mdot_c_raw = 0.0
     sum_mdot_dT_c = 0.0
     for hp in hp_list:
-        Pmag = abs(float(hp.peakCooling_ground_load))
+        Pmag = abs(float(hp.peak_ground_load_cooling))
         if Pmag <= 0.0:
             continue
-        dT = float(hp.deltaTCooling)
+        dT = float(hp.delta_temperature_cooling)
         if dT <= 0:
             raise ValueError(
-                f"HeatPump ID={hp.ID}: deltaTCooling must be > 0 when cooling is active"
+                f"HeatPump ID={hp.id_}: delta_temperature_cooling must be > 0 when cooling is active"
             )
         mdot = Pmag / (cp * dT)
         sum_mdot_c_raw += mdot
@@ -169,31 +169,31 @@ def ground_loads_from_heat_pumps(
     if sum_mdot_c_raw <= 0.0:
         # Loads exist but flows are inconsistent — return without cooling flows
         return GroundLoads(
-            heating_ground_load_W=heating_ground_load_W,
-            cooling_ground_load_W=cooling_ground_load_W,
+            ground_load_heating=ground_load_heating,
+            ground_load_cooling=ground_load_cooling,
             has_cooling=True,
-            peak_heating_h=peak_heating_h,
-            peak_cooling_h=peak_cooling_h,
-            deltaT_sys_heat=deltaT_sys_heat,
-            deltaT_sys_cool=None,
-            aggregated_mdot_peak_heat_kg_s=aggregated_mdot_peak_heat_kg_s,
-            aggregated_mdot_peak_cool_kg_s=None,
+            peak_hours_heating=peak_hours_heating,
+            peak_hours_cooling=peak_hours_cooling,
+            flow_weighted_brine_delta_temperature_heating=flow_weighted_brine_delta_temperature_heating,
+            flow_weighted_brine_delta_temperature_cooling=None,
+            summed_peak_mass_flow_heating=summed_peak_mass_flow_heating,
+            summed_peak_mass_flow_cooling=None,
         )
 
-    deltaT_sys_cool = float(sum_mdot_dT_c / sum_mdot_c_raw)
+    flow_weighted_brine_delta_temperature_cooling = float(sum_mdot_dT_c / sum_mdot_c_raw)
     scale_C = 0.0 if P_peak_c_div == 0.0 else (P_peak_c_eff / P_peak_c_div)
-    aggregated_mdot_peak_cool_kg_s = float(scale_C * f * sum_mdot_c_raw)
+    summed_peak_mass_flow_cooling = float(scale_C * f * sum_mdot_c_raw)
 
     return GroundLoads(
-        heating_ground_load_W=heating_ground_load_W,
-        cooling_ground_load_W=cooling_ground_load_W,
+        ground_load_heating=ground_load_heating,
+        ground_load_cooling=ground_load_cooling,
         has_cooling=True,
-        peak_heating_h=peak_heating_h,
-        peak_cooling_h=peak_cooling_h,
-        deltaT_sys_heat=deltaT_sys_heat,
-        deltaT_sys_cool=deltaT_sys_cool,
-        aggregated_mdot_peak_heat_kg_s=aggregated_mdot_peak_heat_kg_s,
-        aggregated_mdot_peak_cool_kg_s=aggregated_mdot_peak_cool_kg_s,
+        peak_hours_heating=peak_hours_heating,
+        peak_hours_cooling=peak_hours_cooling,
+        flow_weighted_brine_delta_temperature_heating=flow_weighted_brine_delta_temperature_heating,
+        flow_weighted_brine_delta_temperature_cooling=flow_weighted_brine_delta_temperature_cooling,
+        summed_peak_mass_flow_heating=summed_peak_mass_flow_heating,
+        summed_peak_mass_flow_cooling=summed_peak_mass_flow_cooling,
     )
 
 
@@ -207,8 +207,8 @@ def ground_loads_from_district(
     *,
     f_peak_heating: float = 1.0,
     f_peak_cooling: float = 1.0,
-    peak_heating_h: float = 4.0,
-    peak_cooling_h: Optional[float] = 4.0,
+    peak_hours_heating: float = 4.0,
+    peak_hours_cooling: Optional[float] = 4.0,
 ) -> GroundLoads:
     """
     Derive ground-side loads from aggregated district-level loads (AggregatedLoadInput).
@@ -222,14 +222,14 @@ def ground_loads_from_district(
         raise ValueError(f"f_peak_heating must be in [0, 1]. Got {f_peak_heating}")
     if not (0.0 <= f_peak_cooling <= 1.0):
         raise ValueError(f"f_peak_cooling must be in [0, 1]. Got {f_peak_cooling}")
-    if peak_heating_h <= 0:
-        raise ValueError("peak_heating_h must be > 0")
-    if peak_cooling_h is not None and peak_cooling_h <= 0:
-        raise ValueError("peak_cooling_h must be > 0 when provided")
+    if peak_hours_heating <= 0:
+        raise ValueError("peak_hours_heating must be > 0")
+    if peak_hours_cooling is not None and peak_hours_cooling <= 0:
+        raise ValueError("peak_hours_cooling must be > 0 when provided")
     if li.cop_yearly_heating <= 0 or li.cop_winter_heating <= 0 or li.cop_peak_heating <= 0:
         raise ValueError("All COP values must be > 0")
-    if li.deltaT_heating <= 0:
-        raise ValueError("deltaT_heating must be > 0")
+    if li.delta_temperature_heating <= 0:
+        raise ValueError("delta_temperature_heating must be > 0")
 
     P_ann_H = li.load_yearly_heating  * (1.0 - 1.0 / li.cop_yearly_heating)
     P_win_H = li.load_winter_heating  * (1.0 - 1.0 / li.cop_winter_heating)
@@ -237,42 +237,42 @@ def ground_loads_from_district(
     S_H = f_peak_heating * diversity_factor_from_n_heat_pumps(li.n_consumers_heating)
     P_peak_H = P_raw_H * S_H
 
-    heating_ground_load_W = np.array([P_ann_H, P_win_H, P_peak_H], dtype=float)
-    deltaT_sys_heat = float(li.deltaT_heating)
-    aggregated_mdot_peak_heat_kg_s = float(P_peak_H / (cp * li.deltaT_heating))
+    ground_load_heating = np.array([P_ann_H, P_win_H, P_peak_H], dtype=float)
+    flow_weighted_brine_delta_temperature_heating = float(li.delta_temperature_heating)
+    summed_peak_mass_flow_heating = float(P_peak_H / (cp * li.delta_temperature_heating))
 
     if not li.has_cooling:
         return GroundLoads(
-            heating_ground_load_W=heating_ground_load_W,
-            cooling_ground_load_W=None,
+            ground_load_heating=ground_load_heating,
+            ground_load_cooling=None,
             has_cooling=False,
-            peak_heating_h=peak_heating_h,
-            peak_cooling_h=peak_cooling_h,
-            deltaT_sys_heat=deltaT_sys_heat,
-            deltaT_sys_cool=None,
-            aggregated_mdot_peak_heat_kg_s=aggregated_mdot_peak_heat_kg_s,
-            aggregated_mdot_peak_cool_kg_s=None,
+            peak_hours_heating=peak_hours_heating,
+            peak_hours_cooling=peak_hours_cooling,
+            flow_weighted_brine_delta_temperature_heating=flow_weighted_brine_delta_temperature_heating,
+            flow_weighted_brine_delta_temperature_cooling=None,
+            summed_peak_mass_flow_heating=summed_peak_mass_flow_heating,
+            summed_peak_mass_flow_cooling=None,
         )
 
-    if li.eer_cooling <= 0:
-        raise ValueError("eer_cooling must be > 0 when cooling is active")
-    if li.deltaT_cooling <= 0:
-        raise ValueError("deltaT_cooling must be > 0 when cooling is active")
+    if li.eer <= 0:
+        raise ValueError("eer must be > 0 when cooling is active")
+    if li.delta_temperature_cooling <= 0:
+        raise ValueError("delta_temperature_cooling must be > 0 when cooling is active")
 
-    P_ann_C = li.load_yearly_cooling  * (1.0 + 1.0 / li.eer_cooling)
-    P_sum_C = li.load_summer_cooling  * (1.0 + 1.0 / li.eer_cooling)
-    P_raw_C = li.load_daily_peak_cooling * (1.0 + 1.0 / li.eer_cooling)
+    P_ann_C = li.load_yearly_cooling  * (1.0 + 1.0 / li.eer)
+    P_sum_C = li.load_summer_cooling  * (1.0 + 1.0 / li.eer)
+    P_raw_C = li.load_daily_peak_cooling * (1.0 + 1.0 / li.eer)
     S_C = f_peak_cooling * diversity_factor_from_n_heat_pumps(li.n_consumers_cooling)
     P_peak_C = P_raw_C * S_C
 
     return GroundLoads(
-        heating_ground_load_W=heating_ground_load_W,
-        cooling_ground_load_W=np.array([P_ann_C, P_sum_C, P_peak_C], dtype=float),
+        ground_load_heating=ground_load_heating,
+        ground_load_cooling=np.array([P_ann_C, P_sum_C, P_peak_C], dtype=float),
         has_cooling=True,
-        peak_heating_h=peak_heating_h,
-        peak_cooling_h=peak_cooling_h,
-        deltaT_sys_heat=deltaT_sys_heat,
-        deltaT_sys_cool=float(li.deltaT_cooling),
-        aggregated_mdot_peak_heat_kg_s=aggregated_mdot_peak_heat_kg_s,
-        aggregated_mdot_peak_cool_kg_s=float(P_peak_C / (cp * li.deltaT_cooling)),
+        peak_hours_heating=peak_hours_heating,
+        peak_hours_cooling=peak_hours_cooling,
+        flow_weighted_brine_delta_temperature_heating=flow_weighted_brine_delta_temperature_heating,
+        flow_weighted_brine_delta_temperature_cooling=float(li.delta_temperature_cooling),
+        summed_peak_mass_flow_heating=summed_peak_mass_flow_heating,
+        summed_peak_mass_flow_cooling=float(P_peak_C / (cp * li.delta_temperature_cooling)),
     )

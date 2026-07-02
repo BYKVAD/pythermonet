@@ -115,12 +115,12 @@ def read_heat_pumps_tsv(path: str | Path) -> list[HeatPump]:
             Qc_s = _get_float(r, "Summer_cooling_load_(W)", hp_id)
             Qc_p = _get_float(r, "Daily_cooling_load_(W)", hp_id)
 
-            EER = _get_float(r, "EER", hp_id)
+            eer = _get_float(r, "EER", hp_id)
             dT_c = _get_float(r, "dT_HP_Cooling", hp_id)
 
             if Qc_p > 0:
-                if EER <= 0:
-                    raise ValueError(f"Invalid EER (<=0) for Heat_pump_ID={hp_id} with cooling load > 0: {EER}")
+                if eer <= 0:
+                    raise ValueError(f"Invalid EER (<=0) for Heat_pump_ID={hp_id} with cooling load > 0: {eer}")
                 if dT_c <= 0:
                     raise ValueError(
                         f"Invalid dT_HP_Cooling (<=0) for Heat_pump_ID={hp_id} with cooling load > 0: {dT_c}"
@@ -130,32 +130,32 @@ def read_heat_pumps_tsv(path: str | Path) -> list[HeatPump]:
                 Qc_y = max(0.0, Qc_y)
                 Qc_s = max(0.0, Qc_s)
                 Qc_p = 0.0
-                if EER <= 0:
-                    EER = 0.0
+                if eer <= 0:
+                    eer = 0.0
                 if dT_c <= 0:
                     dT_c = 0.0
         else:
             Qc_y = 0.0
             Qc_s = 0.0
             Qc_p = 0.0
-            EER = 0.0
+            eer = 0.0
             dT_c = 0.0
 
         heat_pumps.append(
             HeatPump(
-                ID=hp_id,
-                annualHeatingLoad=Qh_y,
-                winterHeatingLoad=Qh_w,
-                peakHeatingLoad=Qh_p,
-                annualSCOP=COP_y,
-                winterSCOP=COP_w,
-                peakCOP=COP_p,
-                deltaTHeating=dT_h,
-                annualCoolingLoad=Qc_y,
-                summerCoolingLoad=Qc_s,
-                peakCoolingLoad=Qc_p,
-                EER=EER,
-                deltaTCooling=dT_c,
+                id_=hp_id,
+                annual_load_heating=Qh_y,
+                winter_load_heating=Qh_w,
+                peak_load_heating=Qh_p,
+                annual_scop=COP_y,
+                winter_scop=COP_w,
+                peak_cop=COP_p,
+                delta_temperature_heating=dT_h,
+                annual_load_cooling=Qc_y,
+                summer_load_cooling=Qc_s,
+                peak_load_cooling=Qc_p,
+                eer=eer,
+                delta_temperature_cooling=dT_c,
             )
         )
 

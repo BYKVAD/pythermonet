@@ -14,7 +14,7 @@ def compute_gfunction_pygfunction(
     coords_xy_m,
     time_s,
     alpha_m2s,
-    H_m,
+    borehole_length,
     r_b_m,
     method="equivalent",
     options=None,
@@ -50,7 +50,7 @@ def compute_gfunction_infinite_medium(
     coords_xy_m,
     time_s,
     alpha_m2s,
-    H_m,
+    borehole_length,
     r_b_m,
     D_large_m,
     method="equivalent",
@@ -72,13 +72,13 @@ def compute_gfunction_infinite_medium(
         # 1D areal field approximated as an equivalent 1-pipe segment.
         # This is conservative and can be improved as needed by caller.
         material = Material(density=950.0, specific_heat=1900.0, thermal_conductivity=0.4)
-        segment = PipeSegment(outer_diameter=2*0.016, sdr=11, material=material, roughnessHeight=1.5e-5, ID=0, length=float(H_m))
+        segment = PipeSegment(outer_diameter=2*0.016, sdr=11, material=material, roughness=1.5e-5, id_=0, length=float(borehole_length))
 
         pi = PipeInfrastructure(
-            NParallelPipes=max(1, int(coords_xy_m.shape[0])),
-            traceSegments=[segment],
-            pipeDistance=1.0,
-            burialDepth=float(r_b_m),
+            n_parallel_pipes=max(1, int(coords_xy_m.shape[0])),
+            trace_segments=[segment],
+            pipe_distance=1.0,
+            burial_depth=float(r_b_m),
         )
 
         g_values = compute_gvalues_hhe(pi, k_s=1.0, alpha=float(alpha_m2s), time=np.asarray(time_s, dtype=float))
@@ -94,7 +94,7 @@ def compute_gfunction_infinite_medium(
         coords_xy_m=coords_xy_m,
         time_s=time_s,
         alpha_m2s=alpha_m2s,
-        H_m=H_m,
+        borehole_length=borehole_length,
         r_b_m=r_b_m,
         method=method,
         options=options,

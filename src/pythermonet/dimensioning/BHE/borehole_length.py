@@ -247,7 +247,7 @@ def _T_fluid_heat_at_H(
 
     Rb is recomputed with flow/length correction at the current H.
     """
-    field_H = replace(vhe_field, H_m=H)
+    field_H = replace(vhe_field, borehole_length=H)
     g = field_H.compute_pygfunctions(times_s=times_s, alpha_m2_s=alpha_m2_s)
     Rb = _rb_corrected(vhe_field, brine, soil, H, m_dot_per_borehole_kg_s)
     q_p = float(P_bhe_W[2]) / (vhe_field.n_boreholes * H)
@@ -269,7 +269,7 @@ def _T_fluid_cool_at_H(
 
     Rb is recomputed with flow/length correction at the current H.
     """
-    field_H = replace(vhe_field, H_m=H)
+    field_H = replace(vhe_field, borehole_length=H)
     g = field_H.compute_pygfunctions(times_s=times_s, alpha_m2_s=alpha_m2_s)
     Rb = _rb_corrected(vhe_field, brine, soil, H, m_dot_per_borehole_kg_s)
     q_p = float(P_bhe_W[2]) / (vhe_field.n_boreholes * H)

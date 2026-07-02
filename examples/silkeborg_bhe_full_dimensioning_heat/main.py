@@ -67,7 +67,7 @@ soil = Soil(
 distribution_network_undimensioned = read_undimensioned_topology_tsv_to_network(
     topology_file,
     pipe_material=pipe_material_dist,
-    roughness_height=1e-6,
+    roughness=1e-6,
     burial_depth=1.2,
     pipe_distance=0.3,
     n_parallel_pipes=2,
@@ -90,21 +90,21 @@ upipe = PipeSegment(
     outer_diameter=u_pipe_outer_diameter_m,
     sdr=u_pipe_sdr,
     material=pipe_material_bhe,
-    roughnessHeight=1e-6,
-    ID=0,
+    roughness=1e-6,
+    id_=0,
     length=100,  # placeholder
 )
 
 BHEfield = VHEField(
-    ID = 1,
-    HE='1U',
-    pipe = upipe,
-    borehole = borehole,
-    grout = grout,
+    id_=1,
+    heat_exchanger_type='1U',
+    pipe=upipe,
+    borehole=borehole,
+    grout=grout,
     coordinates=coordinates,
-    shankSpacing=0.015 + 2 * 0.02,
-    H_m=120.0,
-    D_m=1.0,
+    shank_spacing=0.015 + 2 * 0.02,
+    borehole_length=120.0,
+    burial_depth=1.0,
     tilt_rad=0.0,
     orientation_rad=0.0,
 )
@@ -117,15 +117,15 @@ hp_list = read_heat_pumps_tsv(path=heat_pump_file)
 loads = ground_loads_from_heat_pumps(
     hp_list,
     brine,
-    peak_heating_h=4.0,
+    peak_hours_heating=4.0,
     peak_fraction_heating_mode="incremental",
     peak_fraction_heating=1.0,
-    peak_cooling_h=4.0,
+    peak_hours_cooling=4.0,
     peak_fraction_cooling_mode="incremental",
     peak_fraction_cooling=1.0,
 )
 
-sizing = SizingParameters(time_horizon_years=30.0)
+sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
 
 # -----------------------------------------------------------------------------
 # 5) Brine temperature limits

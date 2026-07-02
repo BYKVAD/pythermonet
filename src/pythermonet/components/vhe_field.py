@@ -12,19 +12,19 @@ from ..core.material import Material
 
 @dataclass(frozen=True, slots=True)
 class VHEField:
-    ID: int
-    HE: str
+    id_: int
     pipe: PipeSegment
     borehole: Annulus
     grout: Material
     coordinates: Sequence[Sequence[float]]
-    shankSpacing: float
+    shank_spacing: float   # m
 
-    H_m: float
-    D_m: float
+    borehole_length: float  # m
+    burial_depth: float     # m
     use_z_as_depth: bool = False
     tilt_rad: float = 0.0
     orientation_rad: float = 0.0
+    heat_exchanger_type: str = "1U"  # e.g. "1U", "2U", "CX" — stored for future use, not yet active in calculations
 
     def __post_init__(self) -> None:
         coords = np.asarray(self.coordinates, dtype=float)
@@ -42,22 +42,22 @@ class VHEField:
             raise ValueError("borehole must not be None.")
         if self.grout is None:
             raise ValueError("grout must not be None.")
-        if self.shankSpacing <= 0.0:
-            raise ValueError("shankSpacing must be > 0.")
+        if self.shank_spacing <= 0.0:
+            raise ValueError("shank_spacing must be > 0.")
 
-        if self.H_m <= 0.0:
-            raise ValueError("H_m must be > 0.")
-        if self.D_m < 0.0:
-            raise ValueError("D_m must be >= 0.")
+        if self.borehole_length <= 0.0:
+            raise ValueError("borehole_length must be > 0.")
+        if self.burial_depth < 0.0:
+            raise ValueError("burial_depth must be >= 0.")
 
         object.__setattr__(
             self,
             "coordinates",
             tuple(tuple(float(v) for v in row) for row in coords),
         )
-        object.__setattr__(self, "shankSpacing", float(self.shankSpacing))
-        object.__setattr__(self, "H_m", float(self.H_m))
-        object.__setattr__(self, "D_m", float(self.D_m))
+        object.__setattr__(self, "shank_spacing", float(self.shank_spacing))
+        object.__setattr__(self, "borehole_length", float(self.borehole_length))
+        object.__setattr__(self, "burial_depth", float(self.burial_depth))
         object.__setattr__(self, "use_z_as_depth", bool(self.use_z_as_depth))
         object.__setattr__(self, "tilt_rad", float(self.tilt_rad))
         object.__setattr__(self, "orientation_rad", float(self.orientation_rad))
@@ -115,11 +115,11 @@ class VHEField:
                     )
                 D_use = float(row[2])
             else:
-                D_use = self.D_m
+                D_use = self.burial_depth
 
             boreholes.append(
                 gt.boreholes.Borehole(
-                    H=self.H_m,
+                    H=self.borehole_length,
                     D=D_use,
                     r_b=self.r_b_m,
                     x=x,

@@ -24,7 +24,7 @@ class AggregatedLoadInput:
     cop_yearly_heating: float
     cop_winter_heating: float
     cop_peak_heating: float
-    deltaT_heating: float          # brine ΔT across HP, heating mode [K]
+    delta_temperature_heating: float          # brine ΔT across HP, heating mode [K]
 
     n_consumers_cooling: int
 
@@ -32,8 +32,8 @@ class AggregatedLoadInput:
     load_summer_cooling: float
     load_daily_peak_cooling: float
 
-    eer_cooling: float
-    deltaT_cooling: float          # brine ΔT across HP, cooling mode [K]
+    eer: float
+    delta_temperature_cooling: float          # brine ΔT across HP, cooling mode [K]
 
     # Derived after init
     has_cooling: bool = field(init=False)
@@ -41,8 +41,8 @@ class AggregatedLoadInput:
     def __post_init__(self) -> None:
         object.__setattr__(self, "has_cooling", (
             self.load_daily_peak_cooling > 0.0
-            and self.eer_cooling > 0.0
-            and self.deltaT_cooling > 0.0
+            and self.eer > 0.0
+            and self.delta_temperature_cooling > 0.0
         ))
 
 
@@ -114,11 +114,11 @@ def read_aggregated_load_tsv(path: str | Path) -> AggregatedLoadInput:
         cop_yearly_heating=_f("Year_COP"),
         cop_winter_heating=_f("Winter_COP"),
         cop_peak_heating=_f("Hour_COP"),
-        deltaT_heating=_f("dT_HP_Heating"),
+        delta_temperature_heating=_f("dT_HP_Heating"),
         n_consumers_cooling=n_cool,
         load_yearly_cooling=load_y_c,
         load_summer_cooling=load_s_c,
         load_daily_peak_cooling=load_p_c,
-        eer_cooling=eer,
-        deltaT_cooling=dT_c,
+        eer=eer,
+        delta_temperature_cooling=dT_c,
     )

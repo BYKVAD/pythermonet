@@ -48,7 +48,7 @@ def compute_rb_for_vhe_field(
     r_p = 0.5 * od_p
     r_i = 0.5 * Di
     r_b = 0.5 * float(vhe_field.borehole.outer_diameter)
-    s = float(vhe_field.shankSpacing)
+    s = float(vhe_field.shank_spacing)
 
     # --- Materialer ---
     k_fluid = float(brine.thermal_conductivity)

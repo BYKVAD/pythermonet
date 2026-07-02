@@ -52,8 +52,8 @@ def make_segment(length: float, seg_id: int = 0) -> PipeSegment:
         outer_diameter=2 * R_PIPE,
         sdr=11,
         material=HDPE,
-        roughnessHeight=1.5e-5,
-        ID=seg_id,
+        roughness=1.5e-5,
+        id_=seg_id,
         length=length,
     )
 
@@ -67,10 +67,10 @@ def make_field(
 ) -> PipeInfrastructure:
     segs = [make_segment(seg_length, i) for i in range(n_segments)]
     return PipeInfrastructure(
-        NParallelPipes=n_pipes,
-        traceSegments=segs,
-        pipeDistance=spacing,
-        burialDepth=depth,
+        n_parallel_pipes=n_pipes,
+        trace_segments=segs,
+        pipe_distance=spacing,
+        burial_depth=depth,
     )
 
 
