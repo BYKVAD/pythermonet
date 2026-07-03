@@ -60,7 +60,7 @@ def get_monthly_demand(hps: list[HeatPump]) -> list[float]:
 def monthly_elec_loads(hps: list[HeatPump], cops: list[float]):
     loads = get_monthly_demand(hps)
 
-    monthly_heat_distribution = [load * 8760.0 / 1_000_000.0 for load in loads]
+    monthly_heat_distribution = [load * 8760.0 / 1000000.0 for load in loads]
 
     elec_demand = []
     for index in range(0,len(monthly_heat_distribution)):

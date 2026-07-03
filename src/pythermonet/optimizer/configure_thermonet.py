@@ -1,44 +1,79 @@
 from __future__ import annotations
 
 from pythermonet.components.ground_loads import ground_loads_from_heat_pumps
-from pythermonet.optimizer.fake_heat_pump import build_fake_heat_pump
+from pythermonet.optimizer.fake_heat_pump import create_heat_pump
 from pythermonet.core.material import Material
 from pythermonet.core.heat_carrier import HeatCarrier
 from pythermonet.core.soil import Soil
 from pythermonet.input.read_pipe_catalogue import read_pipe_catalogue
 from pythermonet.input.read_topology import read_undimensioned_topology_tsv_to_network
-from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
 from pythermonet.input.df_from_sources import df_from_csv
 from pythermonet.dimensioning.hydraulic_dimensioning import run_pipedimensioning
 
 from pythermonet.components.vhe_field import VHEField
+from pythermonet.components.distribution_network import DistributionNetwork
+from pythermonet.components.pipe_infrastructure import PipeInfrastructure
 from pythermonet.core.annulus import Annulus
 from pythermonet.core.pipe_segment import PipeSegment
 
 from pythermonet.dimensioning.BHE.bhe_workflow import run_bhe_sizing_workflow, print_bhe_results, BHEWorkflowResult
-from pythermonet.dimensioning.sizing_parameters import SizingParameters
+
+from pythermonet.components.heat_pump import HeatPump
 
 
-
+import numpy as np
 import sys
 from pathlib import Path
 from typing import List
 
 
+def _filter_network_to_active_hps(
+    network: DistributionNetwork, active_hp_ids: set[int]
+) -> DistributionNetwork:
+    """Return a topology-shape copy with per-section HP ID lists filtered
+    down to `active_hp_ids`. Sections whose filtered HP list is empty are
+    dropped across all parallel arrays.
 
-BUILDING_HP_COP = 3.3
-
-
-def _calc_building_hp_electricity_MWh(building_hp_list) -> float:
+    For "per-HP replicated" sections — where `N_traces` originally equals
+    the number of HP IDs listed for that section (e.g. one service-line
+    copy per building) — `N_traces` is scaled down to the filtered HP
+    count so `N_HP_per_trace` stays at 1. For shared trunk sections
+    (`N_traces == 1`, one physical run serving many HPs), `N_traces`
+    stays as-is.
     """
-    Annual electricity drawn by the building heat pumps to deliver their
-    annual heating load (assumed COP = BUILDING_HP_COP). Independent of
-    ground regeneration — building demand does not change when a
-    supplementary injector reduces ground extraction.
-    """
-    annual_heat_W = sum(hp.annualHeatingLoad for hp in building_hp_list)
-    annual_heat_MWh = annual_heat_W * 8760.0 / 1_000_000.0
-    return annual_heat_MWh / BUILDING_HP_COP
+    keep_idx: list[int] = []
+    new_hp_id_trace: list[np.ndarray] = []
+    new_N_traces: list[int] = []
+    for i, ids in enumerate(network.hp_id_trace):
+        filtered = np.array([int(hid) for hid in ids if int(hid) in active_hp_ids], dtype=int)
+        if filtered.size == 0:
+            continue
+        keep_idx.append(i)
+        new_hp_id_trace.append(filtered)
+
+        original_n_ids = int(len(ids))
+        original_n_traces = int(network.N_traces[i])
+        if original_n_traces == original_n_ids:
+            new_N_traces.append(int(filtered.size))
+        else:
+            new_N_traces.append(original_n_traces)
+
+    infra = network.infrastructure
+    new_infra = PipeInfrastructure(
+        NParallelPipes=infra.NParallelPipes,
+        traceSegments=[infra.traceSegments[i] for i in keep_idx],
+        pipeDistance=infra.pipeDistance,
+        burialDepth=infra.burialDepth,
+    )
+    return DistributionNetwork(
+        infrastructure=new_infra,
+        trace_names=[network.trace_names[i] for i in keep_idx],
+        hp_id_trace=new_hp_id_trace,
+        max_pressure_loss_trace=network.max_pressure_loss_trace[keep_idx],
+        SDR=network.SDR[keep_idx],
+        L_traces=network.L_traces[keep_idx],
+        N_traces=np.array(new_N_traces, dtype=int),
+    )
 
 
 def _define_materials() -> tuple[List[Annulus], Material, HeatCarrier, Soil]:
@@ -131,48 +166,42 @@ _GROUND_LOADS_KWARGS = dict(
 )
 
 
-def _setup_heatpump():
-    hp_list = read_heat_pumps_tsv(df_from_csv(r"C:\software\pythermonetII\examples\silkeborg_bhe_full_dimensioning_heat\data\silkeborg_heat_pump_heat_only.dat",sep=r"\t+"))
 
-    sizing = SizingParameters(time_horizon_years=30.0)
-
-    return hp_list, sizing
 
 
 def setup_init_model(n_boreholes: int = 6):
     pipe_catalogue, pipe_material_dist, brine, soil = _define_materials()
     undim_distrib_network = _define_undim_distribution_network(pipe_material_dist)
     BHEField = _setup_borefield(n_boreholes=n_boreholes)
-    hp_list, sizing = _setup_heatpump()
 
-    return pipe_catalogue, brine, soil, undim_distrib_network, BHEField, hp_list, sizing
+    return pipe_catalogue, brine, soil, undim_distrib_network, BHEField
+
+
 
 
 
 def execute_dimensioning(
-    rated_power_W: float,
-    capacity_factor: float | None = None,
-    summer_capacity_factor: float | None = None,
+    hp_list: List[HeatPump],
+    sizing,
     n_boreholes: int = 6,
+    active_hp_ids: set[int] | None = None,
 ):
 
     sys.stdout.reconfigure(encoding="utf-8")
 
 
-    pipe_catalogue, brine, soil, distribution_network_undimensioned, BHEfield, building_hp_list, sizing = setup_init_model(n_boreholes=n_boreholes)
+    pipe_catalogue, brine, soil, distribution_network_undimensioned, BHEfield = setup_init_model(n_boreholes=n_boreholes)
+
+    if active_hp_ids is not None:
+        distribution_network_undimensioned = _filter_network_to_active_hps(
+            distribution_network_undimensioned, active_hp_ids
+        )
 
     # The fake HP is an external heat injector — not part of the topology, so it
     # must NOT enter hydraulic pipe sizing. It DOES contribute to the ground
     # heat balance, so it goes into the load aggregation only.
-    hp_list_for_loads = list(building_hp_list)
-    if rated_power_W > 0:
-        hp_list_for_loads.append(build_fake_heat_pump(
-            rated_power_W,
-            capacity_factor=capacity_factor,
-            summer_capacity_factor=summer_capacity_factor,
-        ))
 
-    loads = ground_loads_from_heat_pumps(hp_list_for_loads, brine, **_GROUND_LOADS_KWARGS)
+    loads = ground_loads_from_heat_pumps(hp_list, brine, **_GROUND_LOADS_KWARGS)
     # -----------------------------------------------------------------------------
     # 5) Brine temperature limits
     # -----------------------------------------------------------------------------
@@ -186,7 +215,7 @@ def execute_dimensioning(
         pipe_catalogue,
         brine,
         distribution_network_undimensioned,
-        building_hp_list,
+        hp_list,
     )
 
     # -----------------------------------------------------------------------------
@@ -203,19 +232,19 @@ def execute_dimensioning(
         T_brine_max_cool=T_BRINE_MAX_COOL,
     )
 
-    mwh = _calc_building_hp_electricity_MWh(building_hp_list)
+    # mwh = _calc_building_hp_electricity_MWh(hp_list)
 
-    annual_heat_MWh = sum(hp.annualHeatingLoad for hp in building_hp_list) * 8760.0 / 1_000_000.0
-    building_ground_extraction_MWh = sum(
-        hp.annualHeating_ground_load for hp in building_hp_list
-    ) * 8760.0 / 1_000_000.0
+    # annual_heat_MWh = sum(hp.annualHeatingLoad for hp in hp_list) * 8760.0 / 1_000_000.0
+    # building_ground_extraction_MWh = sum(
+    #     hp.annualHeating_ground_load for hp in hp_list
+    # ) * 8760.0 / 1_000_000.0
 
     return {
         "source_length": result.sizing.L_m,
-        "num_boreholes": BHEfield.n_boreholes,
-        "elec_consump": mwh,
-        "heat_consump": annual_heat_MWh,
-        "building_ground_extraction_MWh": building_ground_extraction_MWh,
+        "num_boreholes": BHEfield.n_boreholes
+        # "elec_consump": elec_demand,
+        # "heat_consump": annual_heat_MWh,
+        # "building_ground_extraction_MWh": building_ground_extraction_MWh,
     }
 
     

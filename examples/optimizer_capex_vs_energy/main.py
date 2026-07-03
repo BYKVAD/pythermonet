@@ -15,15 +15,20 @@ cheap source; a steep line is an expensive source.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-from pythermonet.optimizer.main import evaluate_cost
-from pythermonet.optimizer.configure_lcoe import set_init_lcoe
-from pythermonet.optimizer.fake_heat_pump import FAKE_HP_COP
+from pythermonet.optimizer.main import evaluate_cost, evaluate_cost_by_n_hps
+from pythermonet.optimizer.methods import find_root, fit_curves
 
 
 RATED_POWER_W = [0.0, 10_000.0, 20_000.0, 30_000.0, 40_000.0, 50_000.0, 60_000.0, 75_000.0]
+
+SILKEBORG_HP_FILE = Path(
+    r"c:\software\pythermonetII\examples\silkeborg_bhe_full_dimensioning_heat\data\silkeborg_heat_pump_heat_only.dat"
+)
+N_HPS_GRID = range(1, 16)
 
 
 def sweep() -> list[dict]:
@@ -39,114 +44,83 @@ def sweep() -> list[dict]:
     return results
 
 
+def plot_rated_vs_lcoe(rows: list[dict]) -> None:
+    """Plot rated power [kW] on the x-axis vs LCOE on the y-axis, one line
+    per demand case (GSHP, ASHP)."""
+    rated_kW = [r["tot_gshp_load"].rated_power_W / 1000.0 for r in rows]
+    gshp_lcoe = [r["tot_gshp_load"].lcoe for r in rows]
+    ashp_lcoe = [r["tot_ashp_load"].lcoe for r in rows]
+
+    _, ax = plt.subplots()
+    ax.plot(rated_kW, gshp_lcoe, marker="o", label="GSHP")
+    ax.plot(rated_kW, ashp_lcoe, marker="s", label="ASHP")
+    ax.set_xlabel("Fake HP rated power [kW]")
+    ax.set_ylabel("LCOE")
+    ax.legend()
+    ax.grid(True)
+    plt.show()
+
+
+def sweep_by_n_hps(
+    n_hps_grid=N_HPS_GRID,
+    hp_file: Path | None = SILKEBORG_HP_FILE,
+    default_hp_load_W: float | None = None,
+) -> list[dict]:
+    results = []
+    for n in n_hps_grid:
+        print(f"  n_hps={n:>2} ...", flush=True)
+        try:
+            res = evaluate_cost_by_n_hps(
+                n_hps=n,
+                hp_file=hp_file,
+                default_hp_load_W=default_hp_load_W,
+                verbose=False,
+            )
+        except ValueError as e:
+            print(f"    -> INFEASIBLE: {e}")
+            continue
+        results.append(res)
+    return results
+
+
+def extract_list_from_models(rows: list[dict]):
+    n_hps = [int(r["tot_gshp_load"].rated_power_W) for r in rows]
+    gshp_lcoe = [r["tot_gshp_load"].lcoe for r in rows]
+    ashp_lcoe = [r["tot_ashp_load"].lcoe for r in rows]
+
+    return n_hps, gshp_lcoe, ashp_lcoe
+
+
+def plot_n_hps_vs_lcoe(n_hps, gshp_lcoe, ashp_lcoe) -> None:
+    """Plot number of buildings on the x-axis vs project NPV cost on the
+    y-axis, one line per demand case (GSHP, ASHP). CostEvaluation.rated_power_W
+    carries n_hps in this mode."""
+
+    _, ax = plt.subplots()
+    ax.plot(n_hps, gshp_lcoe, marker="o", label="GSHP")
+    ax.plot(n_hps, ashp_lcoe, marker="s", label="ASHP")
+    ax.set_xlabel("Number of buildings")
+    ax.set_ylabel("LCOE")
+    ax.legend()
+    ax.grid(True)
+    plt.show()
+
+
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
 
-    rows = sweep()
+    # rows = sweep()
+    # plot_rated_vs_lcoe(rows)
 
-    rated_kW = [r["rated_power_W"] / 1000.0 for r in rows]
-    fake_capex = [r["fake_hp_capex_DKK"] for r in rows]
-    bore_capex = [r["borehole_capex_DKK"] for r in rows]
-    fake_E = [r["fake_hp_energy_MWh"] for r in rows]
-    bore_E = [r["borehole_energy_MWh"] for r in rows]
+    n_rows = sweep_by_n_hps()
+    n_hps, gshp_lcoe, ashp_lcoe = extract_list_from_models(n_rows)
+    gshp_model, ashp_model = fit_curves(n_hps, gshp_lcoe, ashp_lcoe)
 
-    # Unit cost of capacity: DKK of initial CAPEX per MWh/year of delivery.
-    # Skip rows where energy delivered is ~0 (division blows up and the
-    # point isn't physically meaningful).
-    EPS_MWh = 0.1
+    find_root(gshp_model, ashp_model, min(n_hps), max(n_hps))
+    plot_n_hps_vs_lcoe(n_hps, gshp_lcoe, ashp_lcoe)
+    
 
-    def unit_costs(capex, energy):
-        out = []
-        for C, E in zip(capex, energy):
-            out.append(C / E if E > EPS_MWh else float("nan"))
-        return out
 
-    fake_unit = unit_costs(fake_capex, fake_E)
-    bore_unit = unit_costs(bore_capex, bore_E)
-
-    # Lifetime electricity NPV per MWh/yr of source delivery, using the
-    # real 20-year electricity price path and discount rate from the LCOE
-    # baseline. Convention matches lcc5gdhc: cashflow at end of each step.
-    base = set_init_lcoe()
-    prices = base.price_path_ts.values_ts
-    r = base.r
-    npv_factor_per_MWh_yr = sum(p / (1 + r) ** (t + 1) for t, p in enumerate(prices))
-
-    # Per MWh of brine heat delivered:
-    #   - Boreholes: no own electricity (passive ground source) → 0 OPEX.
-    #   - Fake HP:   own electricity = 1 / FAKE_HP_COP MWh per MWh brine.
-    fake_opex_npv = [(E / FAKE_HP_COP) * npv_factor_per_MWh_yr for E in fake_E]
-    bore_opex_npv = [0.0 for _ in bore_E]
-
-    fake_lifetime = [c + o for c, o in zip(fake_capex, fake_opex_npv)]
-    bore_lifetime = [c + o for c, o in zip(bore_capex, bore_opex_npv)]
-
-    fig, (ax_xy, ax_x, ax_life) = plt.subplots(3, 1, figsize=(10, 12))
-
-    ax_xy.plot(fake_unit, fake_E, marker="o", color="tab:orange",
-               label="Fake HP")
-    ax_xy.plot(bore_unit, bore_E, marker="s", color="tab:blue",
-               label="Boreholes")
-    for u, E, kW in zip(fake_unit, fake_E, rated_kW):
-        if u == u:  # skip NaN
-            ax_xy.annotate(f"{kW:.0f} kW", (u, E), fontsize=8,
-                           textcoords="offset points", xytext=(4, 4),
-                           color="tab:orange")
-    for u, E, kW in zip(bore_unit, bore_E, rated_kW):
-        if u == u:
-            ax_xy.annotate(f"{kW:.0f} kW", (u, E), fontsize=8,
-                           textcoords="offset points", xytext=(4, -10),
-                           color="tab:blue")
-    ax_xy.set_xlabel("Unit cost of capacity [DKK per MWh/year delivered]")
-    ax_xy.set_ylabel("Annual heat delivered to brine [MWh/year]")
-    ax_xy.set_title("Unit cost vs annual energy delivered (Silkeborg)")
-    ax_xy.set_xscale("log")
-    ax_xy.grid(True, which="both", alpha=0.3)
-    ax_xy.legend()
-
-    ax_x.plot(rated_kW, fake_capex, marker="o", color="tab:orange",
-              label="Fake HP CAPEX")
-    ax_x.plot(rated_kW, bore_capex, marker="s", color="tab:blue",
-              label="Boreholes CAPEX")
-    ax_x.plot(rated_kW, [a + b for a, b in zip(fake_capex, bore_capex)],
-              marker="^", color="black", linestyle="--",
-              label="Combined source CAPEX")
-    ax_x.set_xlabel("Fake-HP rated power [kW]")
-    ax_x.set_ylabel("Initial CAPEX [DKK]")
-    ax_x.set_title("How the CAPEX split moves as we shift load to the fake HP")
-    ax_x.grid(True, alpha=0.3)
-    ax_x.legend()
-
-    # CAPEX-only baseline (dashed) + CAPEX + 20-year electricity NPV (solid).
-    # The gap between dashed and solid is the "expensive-to-run" tax.
-    ax_life.plot(fake_E, fake_capex, marker="o", color="tab:orange",
-                 linestyle=":", alpha=0.5, label="Fake HP — CAPEX only")
-    ax_life.plot(fake_E, fake_lifetime, marker="o", color="tab:orange",
-                 label="Fake HP — CAPEX + 20-yr elec NPV")
-    ax_life.plot(bore_E, bore_capex, marker="s", color="tab:blue",
-                 linestyle=":", alpha=0.5, label="Boreholes — CAPEX only")
-    ax_life.plot(bore_E, bore_lifetime, marker="s", color="tab:blue",
-                 label="Boreholes — CAPEX + 20-yr elec NPV")
-    for E, C, kW in zip(fake_E, fake_lifetime, rated_kW):
-        ax_life.annotate(f"{kW:.0f} kW", (E, C), fontsize=8,
-                         textcoords="offset points", xytext=(4, 4),
-                         color="tab:orange")
-    for E, C, kW in zip(bore_E, bore_lifetime, rated_kW):
-        ax_life.annotate(f"{kW:.0f} kW", (E, C), fontsize=8,
-                         textcoords="offset points", xytext=(4, -10),
-                         color="tab:blue")
-    ax_life.set_xlabel("Annual heat delivered to brine [MWh/year]")
-    ax_life.set_ylabel("NPV cost over 20 years [DKK]")
-    ax_life.set_title("Lifetime cost vs annual energy delivered")
-    ax_life.grid(True, alpha=0.3)
-    ax_life.legend(fontsize=8)
-
-    fig.tight_layout()
-    out = "capex_vs_energy.png"
-    fig.savefig(out, dpi=130)
-    print(f"\nSaved plot to {out}")
-
-    plt.show()
 
 
 if __name__ == "__main__":

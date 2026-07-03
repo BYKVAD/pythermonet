@@ -1,19 +1,22 @@
 from copy import deepcopy
-
+from dataclasses import dataclass
+from pathlib import Path
+from pythermonet.components.heat_pump import HeatPump
+from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
+from pythermonet.optimizer.fake_heat_pump import create_heat_pump
 from pythermonet.optimizer.configure_thermonet import execute_dimensioning
+from pythermonet.optimizer.ashp_vs_gshp import monthly_elec_loads
+from pythermonet.input.df_from_sources import df_from_csv
 from lcc5gdhc.system_model import evaluate_project_ts
+from pythermonet.dimensioning.sizing_parameters import SizingParameters
 from pythermonet.optimizer.configure_lcoe import (
-    manipulate_lcoe_input,
-    set_init_lcoe,
+    manipulate_lcoe_input_gshp,
+    manipulate_lcoe_input_ashp,
+    set_init_lcoe_gshp,
+    set_init_lcoe_ashp,
     calc_borehole_cost_pr_m,
 )
-from pythermonet.optimizer.fake_heat_pump import (
-    fake_hp_capex_DKK,
-    fake_hp_annual_elec_MWh,
-    FAKE_HP_COP,
-)
-
-from scipy.optimize import linprog, minimize_scalar  # noqa: F401
+from scipy.optimize import minimize_scalar  # noqa: F401
 
 
 def print_lcoe_breakdown(res: dict, currency: str):
@@ -44,13 +47,68 @@ def print_lcoe_breakdown(res: dict, currency: str):
     print(f"{'TOTAL (LCOE)':<24} {total:>18,.2f} {lcoe:>24,.2f} {1.0:>9.1%}")
 
 
-_BASELINE_LCOE = set_init_lcoe()
+_BASELINE_LCOE_GSHP = set_init_lcoe_gshp()
+_BASELINE_LCOE_ASHP = set_init_lcoe_ashp()
 
+
+
+def _setup_heatpump(rated_power_W: float, num_hp=15):
+    list_of_num_hp = range(0,num_hp,1)
+    hp_list = [
+        create_heat_pump(rated_power_W=rated_power_W/15, hp_id=i + 1)
+        for i in list_of_num_hp
+    ]
+
+    sizing = SizingParameters(time_horizon_years=30.0)
+
+    return hp_list, sizing
+
+
+def _setup_heatpump_from_file(
+    n_hps: int,
+    hp_file: Path | None = None,
+    default_hp_load_W: float | None = None,
+) -> tuple[list[HeatPump], SizingParameters]:
+    """Build the per-building HP list for the N-buildings scenario.
+
+    If `hp_file` is provided, read it (silkeborg-shape TSV) and keep the first
+    `n_hps` rows in file order (IDs 1..n_hps). Otherwise fall back to
+    identical fake heating HPs sized at `default_hp_load_W` each.
+    """
+    if n_hps < 1:
+        raise ValueError("n_hps must be >= 1")
+
+    if hp_file is not None:
+        all_hps = read_heat_pumps_tsv(df_from_csv(hp_file, sep=r"\t+"))
+        if n_hps > len(all_hps):
+            raise ValueError(
+                f"n_hps={n_hps} exceeds available HPs in file ({len(all_hps)})"
+            )
+        hp_list = all_hps[:n_hps]
+    else:
+        if default_hp_load_W is None:
+            raise ValueError("default_hp_load_W is required when hp_file is None")
+        hp_list = [
+            create_heat_pump(rated_power_W=default_hp_load_W, hp_id=i + 1)
+            for i in range(n_hps)
+        ]
+
+    sizing = SizingParameters(time_horizon_years=30.0)
+    return hp_list, sizing
+
+    
+
+
+@dataclass(frozen=True)
+class CostEvaluation:
+    rated_power_W: float
+    lcoe: int
+    source_length_m: float
+    num_boreholes: int
+    borehole_capex_DKK: float
 
 def evaluate_cost(
     rated_power_W: float,
-    capacity_factor: float | None = None,
-    summer_capacity_factor: float | None = None,
     n_boreholes: int = 6,
     verbose: bool = True,
 ) -> dict:
@@ -61,50 +119,153 @@ def evaluate_cost(
     Returns a dict with the LCOE (DKK/MWh_service) and the dimensioning
     outputs that drove it, so callers (e.g. sweeps/plots) can inspect both.
     """
-    dims = execute_dimensioning(
-        rated_power_W,
-        capacity_factor=capacity_factor,
-        summer_capacity_factor=summer_capacity_factor,
-        n_boreholes=n_boreholes,
-    )
 
-    lcoe_model = manipulate_lcoe_input(
-        deepcopy(_BASELINE_LCOE), dims, rated_power_W, capacity_factor=capacity_factor
-    )
+    hp_list, sizing = _setup_heatpump(rated_power_W)
+    hp_list_for_loads = list(hp_list)
 
-    res = evaluate_project_ts(
-        years=lcoe_model.years,
-        steps_per_year=lcoe_model.steps_per_year,
-        real_discount_rate=lcoe_model.r,
-        capex_ts=lcoe_model.capex_ts,
-        opex_fixed_ts=lcoe_model.opex_fixed_ts,
-        opex_variable_ts=lcoe_model.opex_variable_ts,
-        price_paths_ts={"electricity": lcoe_model.price_path_ts},
-        loads_ts=lcoe_model.loads_ts,
-        debt_ts=[lcoe_model.debt_ts],
-    )
 
-    if verbose:
-        print_lcoe_breakdown(res, "DKK")
+    
 
-    fake_capex = fake_hp_capex_DKK(rated_power_W)
-    borehole_capex = calc_borehole_cost_pr_m(dims)
+    gshp_elec_loads = monthly_elec_loads(hp_list_for_loads, [3.2, 3.2, 3.4, 3.4, 3.4, 3.4, 3.5, 3.6, 3.6, 3.6, 3.5, 3.4])
+    ashp_elec_loads = monthly_elec_loads(hp_list_for_loads, [2.3, 2.4, 2.8, 3.4, 4.0, 4.3, 4.5, 4.4, 4.0, 3.4, 2.9, 2.5])
 
-    fake_hp_energy_MWh = fake_hp_annual_elec_MWh(rated_power_W, capacity_factor=capacity_factor) * FAKE_HP_COP
-    borehole_energy_MWh = max(0.0, dims["building_ground_extraction_MWh"] - fake_hp_energy_MWh)
+    elec_demand = {"tot_gshp_load": sum(gshp_elec_loads), "tot_ashp_load": sum(ashp_elec_loads)}
 
-    return {
-        "rated_power_W": rated_power_W,
-        "capacity_factor": capacity_factor,
-        "summer_capacity_factor": summer_capacity_factor,
-        "lcoe_DKK_per_MWh": res["LCOx_total_(currency_per_MWh_service)"],
-        "source_length_m": dims["source_length"],
-        "num_boreholes": dims["num_boreholes"],
-        "fake_hp_capex_DKK": fake_capex,
-        "borehole_capex_DKK": borehole_capex,
-        "fake_hp_energy_MWh": fake_hp_energy_MWh,
-        "borehole_energy_MWh": borehole_energy_MWh,
-    }
+
+
+    # Iterate over dims of electricity consumption
+    # Collect results in datastructure
+    # Return both structures
+
+    som_struc = {}
+
+    # for consumption in dims["elec_consump"]:
+    #     single_dim = deepcopy(dims)
+    #     single_dim["elec_consump"] = dims["elec_consump"][consumption]
+    for demand in elec_demand:
+        elec = elec_demand[demand]
+        is_ashp = demand == "tot_ashp_load"
+
+        if is_ashp:
+            lcoe_model = manipulate_lcoe_input_ashp(deepcopy(_BASELINE_LCOE_ASHP), elec)
+        else:
+            dims = execute_dimensioning(
+                hp_list=hp_list_for_loads,
+                n_boreholes=n_boreholes,
+                sizing=sizing
+            )
+            lcoe_model = manipulate_lcoe_input_gshp(
+                deepcopy(_BASELINE_LCOE_GSHP), dims, rated_power_W, elec
+            )
+
+        res = evaluate_project_ts(
+            years=lcoe_model.years,
+            steps_per_year=lcoe_model.steps_per_year,
+            real_discount_rate=lcoe_model.r,
+            capex_ts=lcoe_model.capex_ts,
+            opex_fixed_ts=lcoe_model.opex_fixed_ts,
+            opex_variable_ts=lcoe_model.opex_variable_ts,
+            price_paths_ts={"electricity": lcoe_model.price_path_ts},
+            loads_ts=lcoe_model.loads_ts,
+            debt_ts=[lcoe_model.debt_ts],
+        )
+
+        if verbose:
+            print_lcoe_breakdown(res, "DKK")
+
+        borehole_capex = 0.0 if is_ashp else calc_borehole_cost_pr_m(dims)
+
+        cost = CostEvaluation(
+            rated_power_W=rated_power_W,
+            lcoe=res["NPV_total_cost"],
+            source_length_m=0.0 if is_ashp else dims["source_length"],
+            num_boreholes=0 if is_ashp else dims["num_boreholes"],
+            borehole_capex_DKK=borehole_capex
+        )
+
+        som_struc[demand] = cost
+
+    # borehole_energy_MWh = max(0.0, single_dim["building_ground_extraction_MWh"] - fake_hp_energy_MWh)
+
+    return som_struc
+
+
+def evaluate_cost_by_n_hps(
+    n_hps: int,
+    hp_file: Path | None = None,
+    default_hp_load_W: float | None = None,
+    n_boreholes: int = 6,
+    verbose: bool = True,
+) -> dict:
+    """
+    Evaluate GSHP + ASHP LCOE for a project of N buildings, each with its own
+    heating demand from the HP file (or an identical fallback load). Baseline
+    CAPEX scales by n_hps/15 in both variants; no fake supplementary HP.
+    """
+    hp_list, sizing = _setup_heatpump_from_file(n_hps, hp_file, default_hp_load_W)
+
+    gshp_elec_loads = monthly_elec_loads(hp_list, [3.2, 3.2, 3.4, 3.4, 3.4, 3.4, 3.5, 3.6, 3.6, 3.6, 3.5, 3.4])
+    ashp_elec_loads = monthly_elec_loads(hp_list, [2.3, 2.4, 2.8, 3.4, 4.0, 4.3, 4.5, 4.4, 4.0, 3.4, 2.9, 2.5])
+    elec_demand = {"tot_gshp_load": sum(gshp_elec_loads), "tot_ashp_load": sum(ashp_elec_loads)}
+
+    active_hp_ids = set(range(1, n_hps + 1))
+    som_struc: dict = {}
+
+    for demand, elec in elec_demand.items():
+        is_ashp = demand == "tot_ashp_load"
+
+        if is_ashp:
+            lcoe_model = manipulate_lcoe_input_ashp(
+                deepcopy(set_init_lcoe_ashp(n_hps=n_hps)), elec
+            )
+            dims = None
+        else:
+            dims = execute_dimensioning(
+                hp_list=hp_list,
+                n_boreholes=n_boreholes,
+                sizing=sizing,
+                active_hp_ids=active_hp_ids,
+            )
+            lcoe_model = manipulate_lcoe_input_gshp(
+                deepcopy(set_init_lcoe_gshp(n_hps=n_hps)), dims, elec
+            )
+
+        res = evaluate_project_ts(
+            years=lcoe_model.years,
+            steps_per_year=lcoe_model.steps_per_year,
+            real_discount_rate=lcoe_model.r,
+            capex_ts=lcoe_model.capex_ts,
+            opex_fixed_ts=lcoe_model.opex_fixed_ts,
+            opex_variable_ts=lcoe_model.opex_variable_ts,
+            price_paths_ts={"electricity": lcoe_model.price_path_ts},
+            loads_ts=lcoe_model.loads_ts,
+            debt_ts=[lcoe_model.debt_ts],
+        )
+
+        if verbose:
+            print_lcoe_breakdown(res, "DKK")
+
+        som_struc[demand] = CostEvaluation(
+            rated_power_W=float(n_hps),
+            lcoe=res["NPV_total_cost"],
+            source_length_m=0.0 if is_ashp else dims["source_length"],
+            num_boreholes=0 if is_ashp else dims["num_boreholes"],
+            borehole_capex_DKK=0.0 if is_ashp else calc_borehole_cost_pr_m(dims),
+        )
+
+    return som_struc
+    # return {
+    #     "rated_power_W": rated_power_W,
+    #     "capacity_factor": capacity_factor,
+    #     "summer_capacity_factor": summer_capacity_factor,
+    #     "lcoe_DKK_per_MWh": res["LCOx_total_(currency_per_MWh_service)"],
+    #     "source_length_m": dims["source_length"],
+    #     "num_boreholes": dims["num_boreholes"],
+    #     "fake_hp_capex_DKK": fake_capex,
+    #     "borehole_capex_DKK": borehole_capex,
+    #     "fake_hp_energy_MWh": fake_hp_energy_MWh
+    #     # "borehole_energy_MWh": borehole_energy_MWh,
+    # }
 
 
 if __name__ == "__main__":
