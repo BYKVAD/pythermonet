@@ -1,7 +1,7 @@
 from typing import List
 
 from pythermonet.optimizer.lcoe_model import LCOE
-from pythermonet.optimizer.fake_heat_pump import (
+from pythermonet.optimizer.heat_pump import (
     fake_hp_capex_DKK,
     fake_hp_annual_elec_MWh,
 )

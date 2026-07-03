@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pythermonet.components.ground_loads import ground_loads_from_heat_pumps
-from pythermonet.optimizer.fake_heat_pump import create_heat_pump
+from pythermonet.optimizer.heat_pump import create_heat_pump
 from pythermonet.core.material import Material
 from pythermonet.core.heat_carrier import HeatCarrier
 from pythermonet.core.soil import Soil

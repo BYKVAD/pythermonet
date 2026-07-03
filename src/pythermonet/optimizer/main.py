@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from pythermonet.components.heat_pump import HeatPump
 from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
-from pythermonet.optimizer.fake_heat_pump import create_heat_pump
+from pythermonet.optimizer.heat_pump import create_heat_pump
 from pythermonet.optimizer.configure_thermonet import execute_dimensioning
 from pythermonet.optimizer.ashp_vs_gshp import monthly_elec_loads
 from pythermonet.input.df_from_sources import df_from_csv
