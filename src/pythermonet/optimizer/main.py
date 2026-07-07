@@ -106,6 +106,7 @@ class CostEvaluation:
     source_length_m: float
     num_boreholes: int
     borehole_capex_DKK: float
+    elec: float
 
 def evaluate_cost(
     rated_power_W: float,
@@ -180,7 +181,8 @@ def evaluate_cost(
             lcoe=res["NPV_total_cost"],
             source_length_m=0.0 if is_ashp else dims["source_length"],
             num_boreholes=0 if is_ashp else dims["num_boreholes"],
-            borehole_capex_DKK=borehole_capex
+            borehole_capex_DKK=borehole_capex,
+            elec=elec
         )
 
         som_struc[demand] = cost
@@ -251,21 +253,10 @@ def evaluate_cost_by_n_hps(
             source_length_m=0.0 if is_ashp else dims["source_length"],
             num_boreholes=0 if is_ashp else dims["num_boreholes"],
             borehole_capex_DKK=0.0 if is_ashp else calc_borehole_cost_pr_m(dims),
+            elec=elec
         )
 
     return som_struc
-    # return {
-    #     "rated_power_W": rated_power_W,
-    #     "capacity_factor": capacity_factor,
-    #     "summer_capacity_factor": summer_capacity_factor,
-    #     "lcoe_DKK_per_MWh": res["LCOx_total_(currency_per_MWh_service)"],
-    #     "source_length_m": dims["source_length"],
-    #     "num_boreholes": dims["num_boreholes"],
-    #     "fake_hp_capex_DKK": fake_capex,
-    #     "borehole_capex_DKK": borehole_capex,
-    #     "fake_hp_energy_MWh": fake_hp_energy_MWh
-    #     # "borehole_energy_MWh": borehole_energy_MWh,
-    # }
 
 
 if __name__ == "__main__":

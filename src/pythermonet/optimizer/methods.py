@@ -22,8 +22,10 @@ def find_root(model_1, model_2, low, high):
     return None
 
 
-# Change to x-axis being total watt*h
+# Change to x-axis being total watt*h (i guess this should be based on the electricity?)
+#   x-axis will be defined as the sum of electricity load for the number of heatpumps
 # Håndter intersection uden at skulle bruge fit af linjer (muligvis simplere når det er watt*h grundet ikke afbøjnoing til sidste)
+#   alternativt, når vi har fikset watt*h, så kan vi ved hjælp af matematik udregne skæringen
 # Sørg for at energiberegning fra monthly_elec_loads også er den samme energiberegning som indgå i execute_dimensioning (pythermonet)
-# revisit heat_pump.py -> Does it make sense with a capacity factor to determine the difference or can we do this more dynamic using cop and building loads? (Should be coupled with fast load estimator)
 # clean code when we achieved a starting point
+# revisit heat_pump.py -> Does it make sense with a capacity factor to determine the difference or can we do this more dynamic using cop and building loads? (Should be coupled with fast load estimator)

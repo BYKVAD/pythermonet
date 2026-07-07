@@ -87,8 +87,10 @@ def extract_list_from_models(rows: list[dict]):
     n_hps = [int(r["tot_gshp_load"].rated_power_W) for r in rows]
     gshp_lcoe = [r["tot_gshp_load"].lcoe for r in rows]
     ashp_lcoe = [r["tot_ashp_load"].lcoe for r in rows]
+    ashp_elec = [r["tot_ashp_load"].elec for r in rows]
+    gshp_elec = [r["tot_gshp_load"].elec for r in rows]
 
-    return n_hps, gshp_lcoe, ashp_lcoe
+    return ashp_elec, gshp_elec, n_hps, gshp_lcoe, ashp_lcoe
 
 
 def plot_n_hps_vs_lcoe(n_hps, gshp_lcoe, ashp_lcoe) -> None:
@@ -106,6 +108,21 @@ def plot_n_hps_vs_lcoe(n_hps, gshp_lcoe, ashp_lcoe) -> None:
     plt.show()
 
 
+def plot_Wh_vs_lcoe(gshp_elec, ashp_elec, gshp_lcoe, ashp_lcoe) -> None:
+    """Plot number of buildings on the x-axis vs project NPV cost on the
+    y-axis, one line per demand case (GSHP, ASHP). CostEvaluation.rated_power_W
+    carries n_hps in this mode."""
+
+    _, ax = plt.subplots()
+    ax.plot(gshp_elec, gshp_lcoe, marker="o", label="GSHP")
+    ax.plot(ashp_elec, ashp_lcoe, marker="s", label="ASHP")
+    ax.set_xlabel("watt*h")
+    ax.set_ylabel("LCOE")
+    ax.legend()
+    ax.grid(True)
+    plt.show()
+
+
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -113,11 +130,12 @@ def main() -> None:
     # plot_rated_vs_lcoe(rows)
 
     n_rows = sweep_by_n_hps()
-    n_hps, gshp_lcoe, ashp_lcoe = extract_list_from_models(n_rows)
-    gshp_model, ashp_model = fit_curves(n_hps, gshp_lcoe, ashp_lcoe)
+    ashp_elec, gshp_elec, n_hps, gshp_lcoe, ashp_lcoe = extract_list_from_models(n_rows)
+    # gshp_model, ashp_model = fit_curves(n_hps, gshp_lcoe, ashp_lcoe)
 
-    find_root(gshp_model, ashp_model, min(n_hps), max(n_hps))
-    plot_n_hps_vs_lcoe(n_hps, gshp_lcoe, ashp_lcoe)
+    # find_root(gshp_model, ashp_model, min(n_hps), max(n_hps))
+    plot_Wh_vs_lcoe(gshp_elec, ashp_elec, gshp_lcoe, ashp_lcoe)
+    # plot_n_hps_vs_lcoe(n_hps, gshp_lcoe, ashp_lcoe)
     
 
 
