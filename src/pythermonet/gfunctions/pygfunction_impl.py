@@ -5,16 +5,16 @@ from .models import GFunctionRequest, GFunctionSet
 def compute_gvalues_pygfunction(req: GFunctionRequest) -> GFunctionSet:
     import pygfunction as gt
 
-    times = np.asarray(req.times_s, dtype=float)
+    times = np.asarray(req.evaluation_times, dtype=float)
     boreholes = req.boreholes
-    options = req.options or {}
+    options = req.pygfunction_options or {}
 
     # Gyldig pygfunction solver-metode
     solver = req.method
 
     gfunc = gt.gfunction.gFunction(
         boreholes,          # boreholes_or_network (positionel)
-        req.alpha_m2_s,     # alpha (positionel)
+        req.thermal_diffusivity_soil,     # alpha (positionel)
         time=times,
         method=solver,
         boundary_condition=req.boundary_condition,
@@ -36,7 +36,7 @@ def compute_gvalues_pygfunction(req: GFunctionRequest) -> GFunctionSet:
         "numpy_version": np.__version__,
         "solver_method": solver,
         "boundary_condition": req.boundary_condition,
-        "alpha_m2_s": float(req.alpha_m2_s),
+        "thermal_diffusivity_soil": float(req.thermal_diffusivity_soil),
         "n_boreholes": int(len(boreholes)),
         "time_grid": {
             "n": int(times.size),
@@ -58,4 +58,4 @@ def compute_gvalues_pygfunction(req: GFunctionRequest) -> GFunctionSet:
         # Hvis pygfunction ændrer API, vil vi stadig have et brugbart meta-sæt
         meta["boreholes_geometry"] = "unavailable"
 
-    return GFunctionSet(times_s=times, g_values=g_values, meta=meta)
+    return GFunctionSet(evaluation_times=times, g_values=g_values, metadata=meta)

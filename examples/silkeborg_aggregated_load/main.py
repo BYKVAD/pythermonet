@@ -40,8 +40,8 @@ soil = Soil(
     thermal_conductivity_shallow_heating=1.25,
     thermal_conductivity_shallow_cooling=1.25,
     geothermal_heat_flux=0.0185,
-    surface_temperature=9.03,
-    surface_temperature_amplitude=7.9,
+    temperature_surface_mean=9.03,
+    temperature_surface_amplitude=7.9,
 )
 
 # -----------------------------------------------------------------------------
@@ -65,9 +65,9 @@ coordinates = [[0.0, i * spacing_m] for i in range(n_boreholes)]
 
 pipe_material_bhe = Material(density=1000, specific_heat=2e3, thermal_conductivity=0.4)
 grout    = Material(density=1500, specific_heat=2e3, thermal_conductivity=1.75)
-borehole = Annulus(outer_diameter=0.152, sdr=1000.0)
+borehole = Annulus(diameter_outer=0.152, sdr=1000.0)
 upipe    = PipeSegment(
-    outer_diameter=0.04,
+    diameter_outer=0.04,
     sdr=11.0,
     material=pipe_material_bhe,
     roughness=1e-6,
@@ -83,7 +83,7 @@ BHEfield = VHEField(
     grout=grout,
     coordinates=coordinates,
     shank_spacing=0.015 + 2 * 0.02,
-    borehole_length=120.0,
+    length_borehole=120.0,
     burial_depth=0,
     tilt_rad=0.0,
     orientation_rad=0.0,

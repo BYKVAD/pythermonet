@@ -4,7 +4,7 @@ from pythermonet.core.pipe_segment import PipeSegment
 
 @dataclass
 class PipeInfrastructure:
-    n_parallel_pipes: int
-    trace_segments: List[PipeSegment]  # physical pipe sections making up the thermonet route
-    pipe_distance: float | None    # m
+    n_pipes_parallel: int
+    segments_trace: List[PipeSegment]  # physical pipe sections making up the thermonet route
+    pipe_spacing: float | None    # m
     burial_depth: float            # m

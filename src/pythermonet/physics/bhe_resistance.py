@@ -10,15 +10,46 @@ from pythermonet.physics.thermal_resistances import rb_multipole, rb_multipole_f
 
 @dataclass(frozen=True)
 class BHEResistanceResult:
-    Rb_K_m_W: float
-    Re: float
-    Pr: float
-    Q_m3_s: float
-    v_m_s: float
-    r_b_m: float
-    r_p_m: float
-    r_i_m: float
-    s_m: float
+    """
+    Output of a single borehole thermal resistance calculation.
+
+    ''thermal_resistance_borehole'' is the primary result; the remaining
+    fields are the intermediate flow and geometry values used to compute it,
+    stored for inspection and diagnostics.
+
+    Attributes
+    ----------
+    thermal_resistance_borehole : float
+        Effective borehole thermal resistance Rb [K·m/W].
+    reynolds_number : float
+        Reynolds number of the brine in the U-pipe [-].
+    prandtl_number : float
+        Prandtl number of the brine [-].
+    volume_flow : float
+        Volumetric flow rate per borehole [m³/s].
+    velocity_brine_mean : float
+        Mean cross-sectional brine velocity in the U-pipe [m/s].
+    radius_borehole : float
+        Borehole radius [m].
+    radius_pipe_outer : float
+        U-pipe outer radius [m].
+    radius_pipe_inner : float
+        U-pipe inner radius [m].
+    shank_spacing : float
+        Centre-to-centre distance between the two U-pipe legs [m].
+    used_flow_length_correction : bool
+        Whether the flow-length correction was applied when computing Rb.
+    """
+
+    thermal_resistance_borehole: float  # [K·m/W]
+    reynolds_number: float
+    prandtl_number: float
+    volume_flow: float                  # [m³/s]
+    velocity_brine_mean: float          # [m/s]
+    radius_borehole: float              # [m]
+    radius_pipe_outer: float            # [m]
+    radius_pipe_inner: float            # [m]
+    shank_spacing: float                # [m]
     used_flow_length_correction: bool
 
 def _inner_diameter_from_od_sdr(od_m: float, sdr: float) -> float:
@@ -41,13 +72,13 @@ def compute_rb_for_vhe_field(
     use_flow_length_correction: bool = True,
 ) -> BHEResistanceResult:
     # --- Geometri ---
-    od_p = float(vhe_field.pipe.outer_diameter)
+    od_p = float(vhe_field.pipe.diameter_outer)
     sdr = float(vhe_field.pipe.sdr)
     Di = _inner_diameter_from_od_sdr(od_p, sdr)
 
     r_p = 0.5 * od_p
     r_i = 0.5 * Di
-    r_b = 0.5 * float(vhe_field.borehole.outer_diameter)
+    r_b = 0.5 * float(vhe_field.borehole.diameter_outer)
     s = float(vhe_field.shank_spacing)
 
     # --- Materialer ---
@@ -84,14 +115,14 @@ def compute_rb_for_vhe_field(
         )
 
     return BHEResistanceResult(
-        Rb_K_m_W=float(Rb),
-        Re=float(Re),
-        Pr=float(Pr),
-        Q_m3_s=float(Q),
-        v_m_s=float(v),
-        r_b_m=float(r_b),
-        r_p_m=float(r_p),
-        r_i_m=float(r_i),
-        s_m=float(s),
+        thermal_resistance_borehole=float(Rb),
+        reynolds_number=float(Re),
+        prandtl_number=float(Pr),
+        volume_flow=float(Q),
+        velocity_brine_mean=float(v),
+        radius_borehole=float(r_b),
+        radius_pipe_outer=float(r_p),
+        radius_pipe_inner=float(r_i),
+        shank_spacing=float(s),
         used_flow_length_correction=bool(use_flow_length_correction),
     )

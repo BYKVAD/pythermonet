@@ -28,22 +28,22 @@ def compute_gfunction_pygfunction(
     # The actual pygfunction engine wants pygfunction borehole objects; callers
     # should still be responsible for correct types in this path.
     req = GFunctionRequest(
-        times_s=np.asarray(time_s, dtype=float),
+        evaluation_times=np.asarray(time_s, dtype=float),
         boreholes=coords_xy_m,
-        alpha_m2_s=float(alpha_m2s),
+        thermal_diffusivity_soil=float(alpha_m2s),
         method=method,
-        options=options or {},
+        pygfunction_options=options or {},
     )
     gset = compute_gvalues_pygfunction(req)
 
     # Convert to compatibility object (duck-type minimal API)
     class _G:
-        def __init__(self, times_s, g_values, meta):
-            self.times_s = times_s
+        def __init__(self, evaluation_times, g_values, metadata):
+            self.evaluation_times = evaluation_times
             self.g = np.asarray(g_values, dtype=float)
-            self.meta = meta
+            self.metadata = metadata
 
-    return _G(gset.times_s, gset.g_values, gset.meta)
+    return _G(gset.evaluation_times, gset.g_values, gset.metadata)
 
 
 def compute_gfunction_infinite_medium(
@@ -72,16 +72,16 @@ def compute_gfunction_infinite_medium(
         # 1D areal field approximated as an equivalent 1-pipe segment.
         # This is conservative and can be improved as needed by caller.
         material = Material(density=950.0, specific_heat=1900.0, thermal_conductivity=0.4)
-        segment = PipeSegment(outer_diameter=2*0.016, sdr=11, material=material, roughness=1.5e-5, id_=0, length=float(borehole_length))
+        segment = PipeSegment(diameter_outer=2*0.016, sdr=11, material=material, roughness=1.5e-5, id_=0, length=float(borehole_length))
 
         pi = PipeInfrastructure(
-            n_parallel_pipes=max(1, int(coords_xy_m.shape[0])),
-            trace_segments=[segment],
-            pipe_distance=1.0,
+            n_pipes_parallel=max(1, int(coords_xy_m.shape[0])),
+            segments_trace=[segment],
+            pipe_spacing=1.0,
             burial_depth=float(r_b_m),
         )
 
-        g_values = compute_gvalues_hhe(pi, k_s=1.0, alpha=float(alpha_m2s), time=np.asarray(time_s, dtype=float))
+        g_values = compute_gvalues_hhe(pipe_infrastructure=pi, soil_thermal_conductivity=1.0, soil_thermal_diffusivity=float(alpha_m2s), evaluation_times=np.asarray(time_s, dtype=float))
 
         class _G:
             def __init__(self, g):

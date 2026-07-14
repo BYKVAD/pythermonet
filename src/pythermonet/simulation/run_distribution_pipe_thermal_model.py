@@ -11,22 +11,22 @@ from pythermonet.simulation.distribution_pipe_thermal_model import (
     PipeGroup,
     ModeInput,
     DistributionPipeModel,
-    ModeResult,
+    ThermonetPerformance,
     compute_distribution_pipe_thermal_response,
 )
 
 
 def _build_pipe_groups_from_hydraulic(hydraulic: HydraulicResult, Re_arr: np.ndarray) -> list[PipeGroup]:
     network = hydraulic.network
-    L_oneway = np.asarray(network.trace_lengths, dtype=float)
-    npp = int(network.infrastructure.n_parallel_pipes)
-    n_traces = np.asarray(network.trace_counts, dtype=int)
+    L_oneway = np.asarray(network.lengths_trace, dtype=float)
+    npp = int(network.pipe_infrastructure.n_pipes_parallel)
+    n_traces = np.asarray(network.counts_trace, dtype=int)
     Re_arr = np.asarray(Re_arr, dtype=float)
 
     L_m = npp * L_oneway
-    pipe_spacing = float(network.infrastructure.pipe_distance) if npp > 1 else None
-    burial_depth = float(network.infrastructure.burial_depth)
-    k_pipe = float(network.pipe_material.thermal_conductivity)
+    pipe_spacing = float(network.pipe_infrastructure.pipe_spacing) if npp > 1 else None
+    burial_depth = float(network.pipe_infrastructure.burial_depth)
+    k_pipe = float(network.material_pipe.thermal_conductivity)
 
     out: list[PipeGroup] = []
     for i in range(len(L_m)):
@@ -34,10 +34,10 @@ def _build_pipe_groups_from_hydraulic(hydraulic: HydraulicResult, Re_arr: np.nda
             PipeGroup(
                 id_=i,
                 length=float(L_m[i]),
-                inner_diameter=float(hydraulic.pipe_inner_diameters[i]),
-                outer_diameter=float(hydraulic.pipe_outer_diameters[i]),
+                diameter_inner=float(hydraulic.diameters_inner[i]),
+                diameter_outer=float(hydraulic.diameters_outer[i]),
                 reynolds_number=float(Re_arr[i]),
-                pipe_thermal_conductivity=k_pipe,
+                thermal_conductivity_pipe=k_pipe,
                 burial_depth=burial_depth,
                 n_parallel_pipes=npp,
                 n_traces=int(n_traces[i]),
@@ -57,18 +57,18 @@ def compute_distribution_pipe_thermal_capacity(
     times_cool_s: Optional[np.ndarray] = None,
     T_brine_min_heat: float = 0.0,
     T_brine_max_cool: Optional[float] = None,
-) -> dict[str, ModeResult]:
-    P_heat = np.asarray(ground_loads.ground_load_heating, dtype=float)
-    P_cool = getattr(ground_loads, "ground_load_cooling", None)
+) -> dict[str, ThermonetPerformance]:
+    P_heat = np.asarray(ground_loads.loads_ground_heating, dtype=float)
+    P_cool = getattr(ground_loads, "loads_ground_cooling", None)
 
     if P_cool is not None:
         P_heat, P_cool = apply_annual_balance(P_heat, np.asarray(P_cool, dtype=float))
 
     heating = ModeInput(
-        times_s=np.asarray(times_heat_s, dtype=float),
-        powers_W=P_heat,
+        pulse_timescales=np.asarray(times_heat_s, dtype=float),
+        pulse_loads=P_heat,
         temperature_heat_pump_inlet=float(T_brine_min_heat),
-        temperature_heat_pump_outlet=float(T_brine_min_heat - ground_loads.flow_weighted_brine_delta_temperature_heating),
+        temperature_heat_pump_outlet=float(T_brine_min_heat - ground_loads.temperature_delta_brine_flow_weighted_heating),
     )
 
     pipe_groups_heat = _build_pipe_groups_from_hydraulic(hydraulic, Re_arr=hydraulic.reynolds_numbers_heating)
@@ -76,8 +76,8 @@ def compute_distribution_pipe_thermal_capacity(
     model_heat = DistributionPipeModel(
         brine=brine,
         soil=soil,
-        undisturbed_ground_temperature=float(soil.surface_temperature),
-        surface_temperature_amplitude=float(soil.surface_temperature_amplitude),
+        temperature_ground_undisturbed=float(soil.temperature_surface_mean),
+        temperature_surface_amplitude=float(soil.temperature_surface_amplitude),
         pipe_groups=pipe_groups_heat,
         heating=heating,
         cooling=None,
@@ -91,10 +91,10 @@ def compute_distribution_pipe_thermal_capacity(
             raise ValueError("T_brine_max_cool must be provided when ground_load_cooling exists")
 
         cooling = ModeInput(
-            times_s=np.asarray(times_cool_s, dtype=float),
-            powers_W=np.asarray(P_cool, dtype=float),
+            pulse_timescales=np.asarray(times_cool_s, dtype=float),
+            pulse_loads=np.asarray(P_cool, dtype=float),
             temperature_heat_pump_inlet=float(T_brine_max_cool),
-            temperature_heat_pump_outlet=float(T_brine_max_cool + ground_loads.flow_weighted_brine_delta_temperature_cooling),
+            temperature_heat_pump_outlet=float(T_brine_max_cool + ground_loads.temperature_delta_brine_flow_weighted_cooling),
         )
 
         # Use the cooling Reynolds number so the pipe thermal resistance is
@@ -109,8 +109,8 @@ def compute_distribution_pipe_thermal_capacity(
         model_cool = DistributionPipeModel(
             brine=brine,
             soil=soil,
-            undisturbed_ground_temperature=float(soil.surface_temperature),
-            surface_temperature_amplitude=float(soil.surface_temperature_amplitude),
+            temperature_ground_undisturbed=float(soil.temperature_surface_mean),
+            temperature_surface_amplitude=float(soil.temperature_surface_amplitude),
             pipe_groups=pipe_groups_cool,
             heating=heating,  # required field; only the cooling result is used
             cooling=cooling,

@@ -49,7 +49,7 @@ HDPE   = Material(density=950, specific_heat=1900, thermal_conductivity=0.4)
 
 def make_segment(length: float, seg_id: int = 0) -> PipeSegment:
     return PipeSegment(
-        outer_diameter=2 * R_PIPE,
+        diameter_outer=2 * R_PIPE,
         sdr=11,
         material=HDPE,
         roughness=1.5e-5,
@@ -67,9 +67,9 @@ def make_field(
 ) -> PipeInfrastructure:
     segs = [make_segment(seg_length, i) for i in range(n_segments)]
     return PipeInfrastructure(
-        n_parallel_pipes=n_pipes,
-        trace_segments=segs,
-        pipe_distance=spacing,
+        n_pipes_parallel=n_pipes,
+        segments_trace=segs,
+        pipe_spacing=spacing,
         burial_depth=depth,
     )
 
@@ -165,7 +165,7 @@ def test_ils_convergence():
     g_ref  = ils_gfunc(time, R_PIPE, ALPHA)
     g_hfls = hhe.gfunction(
         make_field(1, seg_length=L),
-        k_s=K_S, alpha=ALPHA, time=time,
+        soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time,
     )
 
     max_err = _assert_close(g_hfls, g_ref, rtol=0.01, label="ILS convergence")
@@ -194,7 +194,7 @@ def test_image_source_effect():
 
     g_hfls = hhe.gfunction(
         make_field(1, seg_length=L),
-        k_s=K_S, alpha=ALPHA, time=time,
+        soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time,
     )
     g_ils = ils_gfunc(time, R_PIPE, ALPHA)
 
@@ -221,9 +221,9 @@ def test_finite_length_effect():
     """
     time = np.geomspace(3600, 3600 * 24 * 365, 20)
     g_short = hhe.gfunction(make_field(1, seg_length=10.0),
-                             k_s=K_S, alpha=ALPHA, time=time)
+                             soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
     g_long  = hhe.gfunction(make_field(1, seg_length=200.0),
-                             k_s=K_S, alpha=ALPHA, time=time)
+                             soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
 
     # At times where sqrt(4at) ~ L_short, end effects reduce g.
     # Tolerance 1e-5 * max(g) covers quadrature roundoff at early times
@@ -254,7 +254,7 @@ def test_monotonicity():
         "2 segments":     make_field(1, n_segments=2, seg_length=50.0),
     }
     for label, field in configs.items():
-        g = hhe.gfunction(field, k_s=K_S, alpha=ALPHA, time=time)
+        g = hhe.gfunction(field, soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
         _assert_monotone(g, label)
         print(f"  [PASS] Monotonicity: {label} OK")
     return time, configs
@@ -270,10 +270,10 @@ def test_multi_pipe_interaction():
     so g_N >= g_1 for all N > 1 at all times.
     """
     time = np.geomspace(3600 * 24, 3600 * 24 * 365 * 10, 15)
-    g1 = hhe.gfunction(make_field(1), k_s=K_S, alpha=ALPHA, time=time)
+    g1 = hhe.gfunction(make_field(1), soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
 
     for n in [2, 3, 5]:
-        gn = hhe.gfunction(make_field(n), k_s=K_S, alpha=ALPHA, time=time)
+        gn = hhe.gfunction(make_field(n), soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
         assert np.all(gn >= g1 - 1e-10), (
             f"Multi-pipe: g({n} pipes) should be >= g(1 pipe)"
         )
@@ -299,11 +299,11 @@ def test_spatial_cutoff():
     time_early = np.array([3600.0, 7200.0, 3600.0 * 6])
 
     g1       = hhe.gfunction(make_field(1),
-                              k_s=K_S, alpha=ALPHA, time=time_early)
+                              soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time_early)
     g2_close = hhe.gfunction(make_field(2, spacing=1.0),
-                              k_s=K_S, alpha=ALPHA, time=time_early)
+                              soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time_early)
     g2_far   = hhe.gfunction(make_field(2, spacing=50.0),
-                              k_s=K_S, alpha=ALPHA, time=time_early)
+                              soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time_early)
 
     # Far pipe at early times: g2_far should be very close to g1
     # (interaction is zero, g averages over 2 identical uncoupled pipes)
@@ -315,8 +315,8 @@ def test_spatial_cutoff():
 
     # Close pipe: should be larger than g1 at longer times
     t_long = np.array([3600.0 * 24 * 30])
-    g1_l  = hhe.gfunction(make_field(1),          k_s=K_S, alpha=ALPHA, time=t_long)
-    g2_l  = hhe.gfunction(make_field(2, spacing=1.0), k_s=K_S, alpha=ALPHA, time=t_long)
+    g1_l  = hhe.gfunction(make_field(1),          soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, time=t_long)
+    g2_l  = hhe.gfunction(make_field(2, spacing=1.0), soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, time=t_long)
     assert g2_l[0] > g1_l[0], "Nearby pipe should increase g at longer times"
 
     print(f"  [PASS] Spatial cutoff: distant pipe negligible at early times OK")
@@ -350,7 +350,7 @@ def make_plots(outdir: str):
     time = np.geomspace(60, 3600 * 24 * 365, 40)
     g_ils  = ils_gfunc(time, R_PIPE, ALPHA)
     g_hfls = hhe.gfunction(make_field(1, seg_length=L),
-                            k_s=K_S, alpha=ALPHA, time=time)
+                            soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
 
@@ -400,11 +400,11 @@ def make_plots(outdir: str):
 
     g_ils_ref = ils_gfunc(time, R_PIPE, ALPHA)
     g_L10   = hhe.gfunction(make_field(1, seg_length=10.0),
-                             k_s=K_S, alpha=ALPHA, time=time)
+                             soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
     g_L50   = hhe.gfunction(make_field(1, seg_length=50.0),
-                             k_s=K_S, alpha=ALPHA, time=time)
+                             soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
     g_L200  = hhe.gfunction(make_field(1, seg_length=200.0),
-                             k_s=K_S, alpha=ALPHA, time=time)
+                             soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
 
     fig, ax = plt.subplots(figsize=(7, 5))
     ax.plot(ln_t(time), g_ils_ref, 'k--', lw=1.2, label='ILS (inf. medium, inf. length)')
@@ -441,7 +441,7 @@ def make_plots(outdir: str):
     time = np.geomspace(3600, 3600 * 24 * 365 * 25, 40)
     n_list = [1, 2, 3, 5, 10]
     g_multi = {n: hhe.gfunction(make_field(n, spacing=1.0),
-                                 k_s=K_S, alpha=ALPHA, time=time)
+                                 soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
                for n in n_list}
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
@@ -484,10 +484,10 @@ def make_plots(outdir: str):
     fig, ax = plt.subplots(figsize=(7, 5))
     for sp in spacings:
         g = hhe.gfunction(make_field(n_fixed, spacing=sp),
-                          k_s=K_S, alpha=ALPHA, time=time)
+                          soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
         ax.plot(ln_t(time), g, lw=1.5, label=f's={sp} m')
 
-    g1 = hhe.gfunction(make_field(1), k_s=K_S, alpha=ALPHA, time=time)
+    g1 = hhe.gfunction(make_field(1), soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
     ax.plot(ln_t(time), g1, 'k--', lw=1.2, label='N=1 (no interaction)')
 
     ax.set_xlabel(r'$\ln(t\,/\,t_s)$')
@@ -507,9 +507,9 @@ def make_plots(outdir: str):
     print("  Plotting: Segment additivity...")
     time = np.geomspace(3600, 3600 * 24 * 365 * 10, 30)
     g_one = hhe.gfunction(make_field(1, seg_length=200.0, n_segments=1),
-                          k_s=K_S, alpha=ALPHA, time=time)
+                          soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
     g_two = hhe.gfunction(make_field(1, seg_length=100.0, n_segments=2),
-                          k_s=K_S, alpha=ALPHA, time=time)
+                          soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
 
@@ -541,10 +541,10 @@ def make_plots(outdir: str):
     # ------------------------------------------------------------------
     print("  Plotting: Spatial cutoff...")
     time = np.geomspace(3600, 3600 * 24 * 365 * 5, 40)
-    g1      = hhe.gfunction(make_field(1),           k_s=K_S, alpha=ALPHA, time=time)
-    g2_1m   = hhe.gfunction(make_field(2, spacing=1.0),  k_s=K_S, alpha=ALPHA, time=time)
-    g2_5m   = hhe.gfunction(make_field(2, spacing=5.0),  k_s=K_S, alpha=ALPHA, time=time)
-    g2_50m  = hhe.gfunction(make_field(2, spacing=50.0), k_s=K_S, alpha=ALPHA, time=time)
+    g1      = hhe.gfunction(make_field(1),           soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
+    g2_1m   = hhe.gfunction(make_field(2, spacing=1.0),  soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
+    g2_5m   = hhe.gfunction(make_field(2, spacing=5.0),  soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
+    g2_50m  = hhe.gfunction(make_field(2, spacing=50.0), soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=time)
 
     fig, ax = plt.subplots(figsize=(7, 5))
     ax.plot(ln_t(time), g1,     'k--', lw=1.2, label='N=1')

@@ -8,21 +8,21 @@ from pythermonet.core.material import Material
 
 @dataclass(frozen=True, slots=True)
 class DistributionNetwork:
-    infrastructure: PipeInfrastructure
-    trace_names: list[str]
-    heat_pump_id_trace: list[np.ndarray]
-    trace_max_pressure_loss: np.ndarray
+    pipe_infrastructure: PipeInfrastructure
+    names_trace: list[str]
+    heat_pump_ids_trace: list[np.ndarray]
+    pressure_losses_max_trace: np.ndarray
     sdr: np.ndarray
-    trace_lengths: np.ndarray
-    trace_counts: np.ndarray
+    lengths_trace: np.ndarray
+    counts_trace: np.ndarray
 
-    pipe_material: Material | None = None  # shared pipe material — must be identical across all trace segments
+    material_pipe: Material | None = None  # shared pipe material — must be identical across all trace segments
 
     def __post_init__(self) -> None:
-        segments = self.infrastructure.trace_segments
+        segments = self.pipe_infrastructure.segments_trace
 
         if len(segments) == 0:
-            raise ValueError("No trace_segments in infrastructure.")
+            raise ValueError("No segments_trace in infrastructure.")
 
         first = segments[0].material
         k0 = first.thermal_conductivity
@@ -36,4 +36,4 @@ class DistributionNetwork:
                     "All pipe materials must have identical thermal properties."
                 )
 
-        object.__setattr__(self, "pipe_material", first)
+        object.__setattr__(self, "material_pipe", first)

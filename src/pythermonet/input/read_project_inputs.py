@@ -19,9 +19,9 @@ from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
 @dataclass(frozen=True)
 class ProjectInputs:
     pipe_catalogue: list[Annulus]
-    catalogue_outer_diameters: np.ndarray
+    diameters_outer_catalogue: np.ndarray
     network: DistributionNetwork
-    heat_pump_list: list[HeatPump]
+    heat_pumps: list[HeatPump]
 
 
 def load_project_inputs(
@@ -38,7 +38,7 @@ def load_project_inputs(
 ) -> ProjectInputs:
     pipe_catalogue = read_pipe_catalogue(pipe_catalogue_file)
     catalogue_outer_diameters = np.asarray(
-        sorted({a.outer_diameter for a in pipe_catalogue}),
+        sorted({a.diameter_outer for a in pipe_catalogue}),
         dtype=float,
     )
 
@@ -51,11 +51,11 @@ def load_project_inputs(
         n_parallel_pipes=n_parallel_pipes,
     )
 
-    heat_pump_list = read_heat_pumps_tsv(path=str(heat_pump_file))
+    heat_pumps = read_heat_pumps_tsv(path=str(heat_pump_file))
 
     return ProjectInputs(
         pipe_catalogue=pipe_catalogue,
-        catalogue_outer_diameters=catalogue_outer_diameters,
+        diameters_outer_catalogue=catalogue_outer_diameters,
         network=network,
-        heat_pump_list=heat_pump_list,
+        heat_pumps=heat_pumps,
     )

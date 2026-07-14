@@ -34,23 +34,25 @@ from .heat_transfer import thermal_propagation_distance
 
 
 class SegmentID(NamedTuple):
-    """Identifies one segment: pipe index p, segment index s."""
-    p: int   # pipe index  (0 .. n_parallel_pipes-1)
-    s: int   # segment index (0 .. NSegments-1)
+    """Identifies one segment by its pipe and segment indices."""
+    pipe_index: int     # 0 .. n_parallel_pipes-1
+    segment_index: int  # 0 .. n_segments-1
 
 
 @dataclass(frozen=True)
 class PairGeometry:
     """
-    Hashable key for a unique source-receiver geometry.
-    dy and dx are rounded to dis_tol buckets.
+    Relative geometry between a source and receiver pipe segment.
+
+    Used as a dictionary key to group segment pairs that share the same
+    relative position, so their heat transfer contribution is computed
+    once and reused. Separations are rounded to a tolerance to allow
+    grouping of near-identical geometries.
     """
-    dy: float    # lateral separation (m)
-    dx: float    # longitudinal start-position offset (m)
-    # src and recv segment indices (same for all pairs sharing this geometry
-    # in a uniform field, but stored so we can look up lengths etc.)
-    s_src: int
-    s_recv: int
+    lateral_separation: float    # [m] centre-to-centre pipe spacing (y direction)
+    longitudinal_offset: float   # [m] start-position offset along trace (x direction)
+    segment_index_source: int
+    segment_index_receiver: int
 
 
 def _round(value: float, tol: float) -> float:
@@ -97,11 +99,11 @@ def build_interaction_map(
     Parameters
     ----------
     n_parallel : int
-        Number of parallel pipes (PipeInfrastructure.n_parallel_pipes).
+        Number of parallel pipes (PipeInfrastructure.n_pipes_parallel).
     pipe_distance : float
         Lateral centre-to-centre pipe spacing (m).
     trace_segments : list of PipeSegment
-        Segment definitions (PipeInfrastructure.trace_segments).
+        Segment definitions (PipeInfrastructure.segments_trace).
     t : float
         Current time (s) for cutoff computation.
     alpha : float
@@ -154,7 +156,12 @@ def build_interaction_map(
                     dy = _round(y_recv - y_src, dis_tol)
                     dx = _round(x_recv - x_src, dis_tol)
 
-                    key = PairGeometry(dy=dy, dx=dx, s_src=s_src, s_recv=s_recv)
+                    key = PairGeometry(
+                        lateral_separation=dy,
+                        longitudinal_offset=dx,
+                        segment_index_source=s_src,
+                        segment_index_receiver=s_recv,
+                    )
 
                     if key not in interaction_map:
                         interaction_map[key] = []

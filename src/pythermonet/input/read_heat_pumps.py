@@ -144,18 +144,18 @@ def read_heat_pumps_tsv(path: str | Path) -> list[HeatPump]:
         heat_pumps.append(
             HeatPump(
                 id_=hp_id,
-                annual_load_heating=Qh_y,
-                winter_load_heating=Qh_w,
-                peak_load_heating=Qh_p,
-                annual_scop=COP_y,
-                winter_scop=COP_w,
-                peak_cop=COP_p,
-                delta_temperature_heating=dT_h,
-                annual_load_cooling=Qc_y,
-                summer_load_cooling=Qc_s,
-                peak_load_cooling=Qc_p,
+                load_annual_heating=Qh_y,
+                load_winter_heating=Qh_w,
+                load_peak_heating=Qh_p,
+                scop_annual=COP_y,
+                scop_winter=COP_w,
+                cop_peak=COP_p,
+                temperature_delta_heating=dT_h,
+                load_annual_cooling=Qc_y,
+                load_summer_cooling=Qc_s,
+                load_peak_cooling=Qc_p,
                 eer=eer,
-                delta_temperature_cooling=dT_c,
+                temperature_delta_cooling=dT_c,
             )
         )
 

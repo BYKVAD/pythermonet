@@ -9,21 +9,21 @@ class HydraulicResult:
     """
     Output from hydraulic pipe dimensioning.
 
-    All per-trace arrays are indexed identically to network.trace_names.
+    All per-trace arrays are indexed identically to network.names_trace.
     Cooling arrays are None when the system has no cooling mode.
     """
 
     network: object  # DistributionNetwork — kept for topology / geometry access
 
     # Installed pipe geometry (per trace)
-    pipe_outer_diameters: np.ndarray   # [m]
-    pipe_inner_diameters: np.ndarray   # [m]
+    diameters_outer: np.ndarray   # [m]
+    diameters_inner: np.ndarray   # [m]
 
     governing_mode: np.ndarray   # dtype=object, values: "heating" | "cooling" | "equal"
 
     # Volume flows (per trace) [m³/s]
-    peak_volume_flow_rate_heating: np.ndarray
-    peak_volume_flow_rate_cooling: np.ndarray | None
+    volume_flow_rates_peak_heating: np.ndarray
+    volume_flow_rates_peak_cooling: np.ndarray | None
 
     # Reynolds numbers for installed network (per trace)
     reynolds_numbers_heating: np.ndarray

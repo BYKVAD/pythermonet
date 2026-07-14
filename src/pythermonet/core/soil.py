@@ -6,5 +6,5 @@ class Soil(Material):
     thermal_conductivity_shallow_heating: float  # [W/m/K]
     thermal_conductivity_shallow_cooling: float  # [W/m/K]
     geothermal_heat_flux: float                  # [W/m²]
-    surface_temperature: float                   # [°C]
-    surface_temperature_amplitude: float         # [K]
+    temperature_surface_mean: float              # [°C]
+    temperature_surface_amplitude: float         # [K]

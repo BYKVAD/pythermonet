@@ -92,7 +92,7 @@ def read_dimensioned_topology_tsv_to_hydraulic(
     trace_segments: list[PipeSegment] = []
     for i in range(n):
         seg = PipeSegment(
-            outer_diameter=float(do_m[i]),
+            diameter_outer=float(do_m[i]),
             sdr=float(sdr[i]),
             material=pipe_material,
             roughness=0.0,   # not needed — pipes already sized
@@ -102,20 +102,20 @@ def read_dimensioned_topology_tsv_to_hydraulic(
         trace_segments.append(seg)
 
     infrastructure = PipeInfrastructure(
-        n_parallel_pipes=int(n_parallel_pipes),
-        trace_segments=trace_segments,
-        pipe_distance=pipe_distance,
+        n_pipes_parallel=int(n_parallel_pipes),
+        segments_trace=trace_segments,
+        pipe_spacing=pipe_distance,
         burial_depth=float(burial_depth),
     )
 
     network = DistributionNetwork(
-        infrastructure=infrastructure,
-        trace_names=trace_names,
-        heat_pump_id_trace=[np.array([], dtype=int)] * n,
-        trace_max_pressure_loss=np.full(n, np.nan),
+        pipe_infrastructure=infrastructure,
+        names_trace=trace_names,
+        heat_pump_ids_trace=[np.array([], dtype=int)] * n,
+        pressure_losses_max_trace=np.full(n, np.nan),
         sdr=sdr,
-        trace_lengths=trace_lengths,
-        trace_counts=trace_counts,
+        lengths_trace=trace_lengths,
+        counts_trace=trace_counts,
     )
 
     # --- Reynolds numbers ---
@@ -140,11 +140,11 @@ def read_dimensioned_topology_tsv_to_hydraulic(
 
     hydraulic = HydraulicResult(
         network=network,
-        pipe_outer_diameters=do_m,
-        pipe_inner_diameters=di_m,
+        diameters_outer=do_m,
+        diameters_inner=di_m,
         governing_mode=np.full(n, "heating", dtype=object),
-        peak_volume_flow_rate_heating=q_heat,
-        peak_volume_flow_rate_cooling=q_cool,
+        volume_flow_rates_peak_heating=q_heat,
+        volume_flow_rates_peak_cooling=q_cool,
         reynolds_numbers_heating=Re_heat,
         reynolds_numbers_cooling=Re_cool,
         pressure_losses_heating=np.full(n, np.nan),

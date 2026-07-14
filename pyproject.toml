@@ -16,10 +16,21 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["matplotlib>=3.9,<4", "pytest>=8.0,<9", "pip-tools>=7.0,<8"]
+dev = ["matplotlib>=3.9,<4", "pytest>=8.0,<9", "pip-tools>=7.0,<8", "ruff>=0.4", "mypy>=1.10"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]   # E/W: pycodestyle, F: pyflakes, I: isort
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true

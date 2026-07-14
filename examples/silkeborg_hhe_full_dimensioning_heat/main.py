@@ -48,8 +48,8 @@ soil = Soil(
     thermal_conductivity_shallow_heating=1.25,
     thermal_conductivity_shallow_cooling=1.25,
     geothermal_heat_flux=0.0185,
-    surface_temperature=9.03,
-    surface_temperature_amplitude=7.9,
+    temperature_surface_mean=9.03,
+    temperature_surface_amplitude=7.9,
 )
 
 # -----------------------------------------------------------------------------
@@ -70,7 +70,7 @@ _, hydraulic = read_dimensioned_topology_tsv_to_hydraulic(
 hhe_pipe_material = pipe_material_dist
 
 hhe_segment = PipeSegment(
-    outer_diameter=0.040,   # 40 mm OD
+    diameter_outer=0.040,   # 40 mm OD
     sdr=17.0,
     material=hhe_pipe_material,
     roughness=1e-6,
@@ -79,9 +79,9 @@ hhe_segment = PipeSegment(
 )
 
 pipe_infrastructure = PipeInfrastructure(
-    n_parallel_pipes=20,      # 10 loops (outgoing + return)
-    trace_segments=[hhe_segment],
-    pipe_distance=1.5,       # lateral spacing between pipes [m]
+    n_pipes_parallel=20,      # 10 loops (outgoing + return)
+    segments_trace=[hhe_segment],
+    pipe_spacing=1.5,        # lateral spacing between pipes [m]
     burial_depth=1.2,        # m
 )
 

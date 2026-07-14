@@ -19,7 +19,7 @@ class VHEField:
     coordinates: Sequence[Sequence[float]]
     shank_spacing: float   # m
 
-    borehole_length: float  # m
+    length_borehole: float  # m
     burial_depth: float     # m
     use_z_as_depth: bool = False
     tilt_rad: float = 0.0
@@ -45,7 +45,7 @@ class VHEField:
         if self.shank_spacing <= 0.0:
             raise ValueError("shank_spacing must be > 0.")
 
-        if self.borehole_length <= 0.0:
+        if self.length_borehole <= 0.0:
             raise ValueError("borehole_length must be > 0.")
         if self.burial_depth < 0.0:
             raise ValueError("burial_depth must be >= 0.")
@@ -56,14 +56,14 @@ class VHEField:
             tuple(tuple(float(v) for v in row) for row in coords),
         )
         object.__setattr__(self, "shank_spacing", float(self.shank_spacing))
-        object.__setattr__(self, "borehole_length", float(self.borehole_length))
+        object.__setattr__(self, "length_borehole", float(self.length_borehole))
         object.__setattr__(self, "burial_depth", float(self.burial_depth))
         object.__setattr__(self, "use_z_as_depth", bool(self.use_z_as_depth))
         object.__setattr__(self, "tilt_rad", float(self.tilt_rad))
         object.__setattr__(self, "orientation_rad", float(self.orientation_rad))
 
     @property
-    def ndim(self) -> int:
+    def n_dims(self) -> int:
         return len(self.coordinates[0])
 
     @property
@@ -71,30 +71,34 @@ class VHEField:
         return len(self.coordinates)
 
     @property
-    def x_m(self) -> tuple[float, ...]:
+    def x_coords(self) -> tuple[float, ...]:
+        """X-coordinate of each borehole [m]."""
         return tuple(row[0] for row in self.coordinates)
 
     @property
-    def y_m(self) -> tuple[float, ...]:
+    def y_coords(self) -> tuple[float, ...]:
+        """Y-coordinate of each borehole [m]."""
         return tuple(row[1] for row in self.coordinates)
 
     @property
-    def z_m(self) -> tuple[float, ...] | None:
-        if self.ndim == 3:
+    def z_coords(self) -> tuple[float, ...] | None:
+        """Z-coordinate of each borehole [m], or None if coordinates are 2D."""
+        if self.n_dims == 3:
             return tuple(row[2] for row in self.coordinates)
         return None
 
     @property
-    def xy_m(self) -> tuple[tuple[float, float], ...]:
+    def xy_coords(self) -> tuple[tuple[float, float], ...]:
+        """(X, Y) coordinates of each borehole [m]."""
         return tuple((row[0], row[1]) for row in self.coordinates)
 
     @property
-    def r_b_m(self) -> float:
-        """Borehole radius [m], derived from borehole.outer_diameter."""
-        return float(self.borehole.outer_diameter) / 2.0
+    def radius_borehole(self) -> float:
+        """Borehole radius [m], derived from borehole.diameter_outer."""
+        return float(self.borehole.diameter_outer) / 2.0
 
     def to_pygfunction_boreholes(self) -> list[gt.boreholes.Borehole]:
-        xy = np.asarray(self.xy_m, dtype=float)
+        xy = np.asarray(self.xy_coords, dtype=float)
         unique_xy = np.unique(xy, axis=0)
         if len(unique_xy) != len(xy):
             raise ValueError(
@@ -119,9 +123,9 @@ class VHEField:
 
             boreholes.append(
                 gt.boreholes.Borehole(
-                    H=self.borehole_length,
+                    H=self.length_borehole,
                     D=D_use,
-                    r_b=self.r_b_m,
+                    r_b=self.radius_borehole,
                     x=x,
                     y=y,
                     tilt=self.tilt_rad,

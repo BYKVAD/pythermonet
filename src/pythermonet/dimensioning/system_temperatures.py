@@ -9,7 +9,7 @@ from pythermonet.components.vhe_field import VHEField
 from pythermonet.core.soil import Soil
 from pythermonet.dimensioning.hydraulic_result import HydraulicResult
 from pythermonet.dimensioning.BHE.borehole_length import FieldSizingResult, apply_annual_balance
-from pythermonet.simulation.distribution_pipe_thermal_model import ModeResult as DistModeResult
+from pythermonet.simulation.distribution_pipe_thermal_model import ThermonetPerformance
 
 
 @dataclass(frozen=True)
@@ -28,48 +28,48 @@ class SystemBrineTemperatureResult:
 
     Fields
     ------
-    system_mean_{annual,winter,peak}_temperature_heating : float
+    temperature_system_mean_{annual,winter,peak}_heating : float
         Mean brine temperature at each heating pulse [°C].
-    system_mean_{annual,summer,peak}_temperature_cooling : float
+    temperature_system_mean_{annual,summer,peak}_cooling : float
         Mean brine temperature at each cooling pulse [°C].
-    bhe_brine_volume : float
+    volume_brine_bhe : float
         Brine volume in BHEs (both U-pipe legs) [m³].
-    thermonet_brine_volume : float
+    volume_brine_thermonet : float
         Brine volume in distribution pipes (supply + return) [m³].
-    total_brine_volume : float
+    volume_brine_total : float
         Total brine volume [m³].
-    bhe_volume_fraction : float
+    volume_fraction_bhe : float
         V_bhe / V_total.
     """
 
-    system_mean_annual_temperature_heating: float         # [°C]
-    system_mean_winter_temperature_heating: float         # [°C]
-    system_mean_peak_temperature_heating: float           # [°C]
+    temperature_system_mean_annual_heating: float         # [°C]
+    temperature_system_mean_winter_heating: float         # [°C]
+    temperature_system_mean_peak_heating: float           # [°C]
 
-    system_mean_annual_temperature_cooling: float | None  # [°C]
-    system_mean_summer_temperature_cooling: float | None  # [°C]
-    system_mean_peak_temperature_cooling: float | None    # [°C]
+    temperature_system_mean_annual_cooling: float | None  # [°C]
+    temperature_system_mean_summer_cooling: float | None  # [°C]
+    temperature_system_mean_peak_cooling: float | None    # [°C]
 
-    bhe_annual_temperature_heating: float                 # [°C]
-    bhe_winter_temperature_heating: float                 # [°C]
-    bhe_peak_temperature_heating: float                   # [°C]
+    temperature_bhe_annual_heating: float                 # [°C]
+    temperature_bhe_winter_heating: float                 # [°C]
+    temperature_bhe_peak_heating: float                   # [°C]
 
-    bhe_annual_temperature_cooling: float | None          # [°C]
-    bhe_summer_temperature_cooling: float | None          # [°C]
-    bhe_peak_temperature_cooling: float | None            # [°C]
+    temperature_bhe_annual_cooling: float | None          # [°C]
+    temperature_bhe_summer_cooling: float | None          # [°C]
+    temperature_bhe_peak_cooling: float | None            # [°C]
 
-    thermonet_annual_temperature_heating: float | None    # [°C]
-    thermonet_winter_temperature_heating: float | None    # [°C]
-    thermonet_peak_temperature_heating: float | None      # [°C]
+    temperature_thermonet_annual_heating: float | None    # [°C]
+    temperature_thermonet_winter_heating: float | None    # [°C]
+    temperature_thermonet_peak_heating: float | None      # [°C]
 
-    thermonet_annual_temperature_cooling: float | None    # [°C]
-    thermonet_summer_temperature_cooling: float | None    # [°C]
-    thermonet_peak_temperature_cooling: float | None      # [°C]
+    temperature_thermonet_annual_cooling: float | None    # [°C]
+    temperature_thermonet_summer_cooling: float | None    # [°C]
+    temperature_thermonet_peak_cooling: float | None      # [°C]
 
-    bhe_brine_volume: float        # [m³]
-    thermonet_brine_volume: float  # [m³]
-    total_brine_volume: float      # [m³]
-    bhe_volume_fraction: float 
+    volume_brine_bhe: float        # [m³]
+    volume_brine_thermonet: float  # [m³]
+    volume_brine_total: float      # [m³]
+    volume_fraction_bhe: float
 
 
 def _bhe_mean_temperatures_heating(
@@ -90,7 +90,7 @@ def _bhe_mean_temperatures_heating(
     """
     N = vhe_field.n_boreholes
     k_s = float(soil.thermal_conductivity)
-    T_g = float(soil.surface_temperature) + float(soil.geothermal_heat_flux) * borehole_length / (2.0 * k_s)
+    T_g = float(soil.temperature_surface_mean) + float(soil.geothermal_heat_flux) * borehole_length / (2.0 * k_s)
     two_pi_ks = 2.0 * math.pi * k_s
 
     q_a = float(P_bhe_W[0]) / (N * borehole_length)
@@ -124,7 +124,7 @@ def _bhe_mean_temperatures_cooling(
     """
     N = vhe_field.n_boreholes
     k_s = float(soil.thermal_conductivity)
-    T_g = float(soil.surface_temperature) + float(soil.geothermal_heat_flux) * borehole_length / (2.0 * k_s)
+    T_g = float(soil.temperature_surface_mean) + float(soil.geothermal_heat_flux) * borehole_length / (2.0 * k_s)
     two_pi_ks = 2.0 * math.pi * k_s
 
     q_a = float(P_bhe_W[0]) / (N * borehole_length)
@@ -148,8 +148,8 @@ def compute_system_brine_temperatures(
     P_cooling_W: np.ndarray | None = None,
     times_cool_s: np.ndarray | None = None,
     soil: Soil,
-    dist_thermal_heat: DistModeResult | None = None,
-    dist_thermal_cool: DistModeResult | None = None,
+    performance_thermonet_heating: ThermonetPerformance | None = None,
+    performance_thermonet_cooling: ThermonetPerformance | None = None,
     pre_balanced: bool = False,
 ) -> SystemBrineTemperatureResult:
     """
@@ -164,7 +164,7 @@ def compute_system_brine_temperatures(
     hydraulic : HydraulicResult
         Hydraulic dimensioning result.
     heat_pumps : HeatPumps
-        Provides flow_weighted_brine_delta_temperature_heating and flow_weighted_brine_delta_temperature_cooling.
+        Provides temperature_delta_brine_flow_weighted_heating and temperature_delta_brine_flow_weighted_cooling.
     P_heating_W : array, shape (3,)
         BHE heating loads [W]: [P_annual, P_winter, P_peak].
     times_heat_s : array, shape (3,)
@@ -175,19 +175,19 @@ def compute_system_brine_temperatures(
         Cooling pulse durations [s]: [t_peak, t_winter, t_annual].
     soil : Soil
         Ground properties.
-    dist_thermal_heat : DistModeResult, optional
+    performance_thermonet_heating : ThermonetPerformance, optional
         Result from the distribution pipe thermal model for heating.
-        ``T_dimv_C`` must be ordered [annual, winter, peak] (i.e. the
+        ``temperatures_mean`` must be ordered [annual, winter, peak] (i.e. the
         distribution model was run with times in descending order).
         When provided the reported system temperatures are the
         volume-weighted average of distribution pipe and BHE temperatures,
         matching the convention of the reference implementation.
-    dist_thermal_cool : DistModeResult, optional
-        Same as dist_thermal_heat but for cooling mode.
+    performance_thermonet_cooling : ThermonetPerformance, optional
+        Same as performance_thermonet_heating but for cooling mode.
     """
     has_cooling = P_cooling_W is not None
 
-    borehole_length = sizing.L_m
+    borehole_length = sizing.length_element
     alpha = float(soil.thermal_conductivity) / (float(soil.density) * float(soil.specific_heat))
     P_heating_W = np.asarray(P_heating_W, dtype=float)
 
@@ -196,7 +196,7 @@ def compute_system_brine_temperatures(
             P_heating_W, np.asarray(P_cooling_W, dtype=float)
         )
 
-    field_H = replace(vhe_field, borehole_length=borehole_length)
+    field_H = replace(vhe_field, length_borehole=borehole_length)
 
     # ------------------------------------------------------------------
     # G-functions at the final borehole_length
@@ -208,15 +208,15 @@ def compute_system_brine_temperatures(
     # ------------------------------------------------------------------
     # Fluid volumes (needed for weighted averaging below)
     # ------------------------------------------------------------------
-    Di_bhe = float(vhe_field.pipe.outer_diameter) * (1.0 - 2.0 / float(vhe_field.pipe.sdr))
+    Di_bhe = float(vhe_field.pipe.diameter_outer) * (1.0 - 2.0 / float(vhe_field.pipe.sdr))
     V_bhe = vhe_field.n_boreholes * 2.0 * (math.pi / 4.0) * Di_bhe ** 2 * borehole_length
 
     network = hydraulic.network
-    n_parallel = int(network.infrastructure.n_parallel_pipes)
-    trace_lengths = np.asarray(network.trace_lengths, dtype=float)
-    trace_counts = np.asarray(network.trace_counts, dtype=int)
+    n_parallel = int(network.pipe_infrastructure.n_pipes_parallel)
+    trace_lengths = np.asarray(network.lengths_trace, dtype=float)
+    trace_counts = np.asarray(network.counts_trace, dtype=int)
     V_dist = float(
-        np.sum(trace_counts * n_parallel * trace_lengths * (math.pi / 4.0) * hydraulic.pipe_inner_diameters ** 2)
+        np.sum(trace_counts * n_parallel * trace_lengths * (math.pi / 4.0) * hydraulic.diameters_inner ** 2)
     )
 
     V_total = V_bhe + V_dist
@@ -225,7 +225,7 @@ def compute_system_brine_temperatures(
     # BHE mean temperatures at each heating pulse
     # ------------------------------------------------------------------
     T_h_ann, T_h_win, T_h_peak = _bhe_mean_temperatures_heating(
-        borehole_length, P_heating_W, g_heat, vhe_field, soil, sizing.R_heating_K_m_W
+        borehole_length, P_heating_W, g_heat, vhe_field, soil, sizing.thermal_resistance_heating
     )
 
     # ------------------------------------------------------------------
@@ -234,7 +234,7 @@ def compute_system_brine_temperatures(
     # When distribution pipe thermal results are provided the system
     # temperature is the volume-weighted average of the distribution pipe
     # mean temperature and the BHE mean temperature, matching the
-    # reference implementation.  Distribution pipe T_dimv_C must be
+    # reference implementation.  Distribution pipe temperatures_mean must be
     # ordered [annual, winter, peak].
     # When not provided (backward-compatible) only the BHE mean is used.
     # ------------------------------------------------------------------
@@ -242,8 +242,8 @@ def compute_system_brine_temperatures(
     T_dist_heat_win: float | None = None
     T_dist_heat_peak_val: float | None = None
 
-    if dist_thermal_heat is not None:
-        T_d = np.asarray(dist_thermal_heat.T_dimv_C, dtype=float)  # [annual, winter, peak]
+    if performance_thermonet_heating is not None:
+        T_d = np.asarray(performance_thermonet_heating.temperatures_mean, dtype=float)  # [annual, winter, peak]
         T_dist_heat_ann  = float(T_d[0])
         T_dist_heat_win  = float(T_d[1])
         T_dist_heat_peak_val = float(T_d[2])
@@ -266,10 +266,10 @@ def compute_system_brine_temperatures(
             times_s=times_cool_s, alpha_m2_s=alpha
         )
         T_c_ann, T_c_win, T_c_peak = _bhe_mean_temperatures_cooling(
-            borehole_length, P_cooling_W, g_cool, vhe_field, soil, sizing.R_cooling_K_m_W
+            borehole_length, P_cooling_W, g_cool, vhe_field, soil, sizing.thermal_resistance_cooling
         )
-        if dist_thermal_cool is not None:
-            T_dc = np.asarray(dist_thermal_cool.T_dimv_C, dtype=float)
+        if performance_thermonet_cooling is not None:
+            T_dc = np.asarray(performance_thermonet_cooling.temperatures_mean, dtype=float)
             T_dist_cool_ann  = float(T_dc[0])
             T_dist_cool_win  = float(T_dc[1])
             T_dist_cool_peak_val = float(T_dc[2])
@@ -282,26 +282,26 @@ def compute_system_brine_temperatures(
             T_avg_cool_peak   = T_c_peak
 
     return SystemBrineTemperatureResult(
-        system_mean_annual_temperature_heating=T_avg_heat_annual,
-        system_mean_winter_temperature_heating=T_avg_heat_winter,
-        system_mean_peak_temperature_heating=T_avg_heat_peak,
-        system_mean_annual_temperature_cooling=T_avg_cool_annual,
-        system_mean_summer_temperature_cooling=T_avg_cool_summer,
-        system_mean_peak_temperature_cooling=T_avg_cool_peak,
-        bhe_annual_temperature_heating=T_h_ann,
-        bhe_winter_temperature_heating=T_h_win,
-        bhe_peak_temperature_heating=T_h_peak,
-        bhe_annual_temperature_cooling=T_c_ann,
-        bhe_summer_temperature_cooling=T_c_win,
-        bhe_peak_temperature_cooling=T_c_peak,
-        thermonet_annual_temperature_heating=T_dist_heat_ann,
-        thermonet_winter_temperature_heating=T_dist_heat_win,
-        thermonet_peak_temperature_heating=T_dist_heat_peak_val,
-        thermonet_annual_temperature_cooling=T_dist_cool_ann,
-        thermonet_summer_temperature_cooling=T_dist_cool_win,
-        thermonet_peak_temperature_cooling=T_dist_cool_peak_val,
-        bhe_brine_volume=V_bhe,
-        thermonet_brine_volume=V_dist,
-        total_brine_volume=V_total,
-        bhe_volume_fraction=V_bhe / V_total,
+        temperature_system_mean_annual_heating=T_avg_heat_annual,
+        temperature_system_mean_winter_heating=T_avg_heat_winter,
+        temperature_system_mean_peak_heating=T_avg_heat_peak,
+        temperature_system_mean_annual_cooling=T_avg_cool_annual,
+        temperature_system_mean_summer_cooling=T_avg_cool_summer,
+        temperature_system_mean_peak_cooling=T_avg_cool_peak,
+        temperature_bhe_annual_heating=T_h_ann,
+        temperature_bhe_winter_heating=T_h_win,
+        temperature_bhe_peak_heating=T_h_peak,
+        temperature_bhe_annual_cooling=T_c_ann,
+        temperature_bhe_summer_cooling=T_c_win,
+        temperature_bhe_peak_cooling=T_c_peak,
+        temperature_thermonet_annual_heating=T_dist_heat_ann,
+        temperature_thermonet_winter_heating=T_dist_heat_win,
+        temperature_thermonet_peak_heating=T_dist_heat_peak_val,
+        temperature_thermonet_annual_cooling=T_dist_cool_ann,
+        temperature_thermonet_summer_cooling=T_dist_cool_win,
+        temperature_thermonet_peak_cooling=T_dist_cool_peak_val,
+        volume_brine_bhe=V_bhe,
+        volume_brine_thermonet=V_dist,
+        volume_brine_total=V_total,
+        volume_fraction_bhe=V_bhe / V_total,
     )

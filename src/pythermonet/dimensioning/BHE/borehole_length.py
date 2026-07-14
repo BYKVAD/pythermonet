@@ -60,7 +60,7 @@ def _rb_simple(
         L_bhe_m=1.0,          # not used without correction - so its just a dummy value
         m_dot_kg_s=m_dot_per_borehole_kg_s,
         use_flow_length_correction=False,
-    ).Rb_K_m_W
+    ).thermal_resistance_borehole
 
 
 def _rb_corrected(
@@ -78,7 +78,7 @@ def _rb_corrected(
         L_bhe_m=H,
         m_dot_kg_s=m_dot_per_borehole_kg_s,
         use_flow_length_correction=True,
-    ).Rb_K_m_W
+    ).thermal_resistance_borehole
 
 
 # ---------------------------------------------------------------------------
@@ -103,8 +103,8 @@ def _g_ils_field(times_s: np.ndarray, alpha: float, vhe_field: VHEField) -> np.n
     g : array, shape (3,)
         g-function values at each time (same convention as pygfunction).
     """
-    r_b = float(vhe_field.r_b_m)
-    xy = np.array(vhe_field.xy_m, dtype=float)  # (N, 2)
+    r_b = float(vhe_field.radius_borehole)
+    xy = np.array(vhe_field.xy_coords, dtype=float)  # (N, 2)
     N = vhe_field.n_boreholes
     TWO_PI = 2.0 * math.pi
 
@@ -175,7 +175,7 @@ def _initial_guess_heating(
     """
     K = _K_factor(P_bhe_W, g_ils, vhe_field, soil, Rb_simple)
     a = float(soil.geothermal_heat_flux) / (2.0 * float(soil.thermal_conductivity))
-    dT0 = float(soil.surface_temperature) - T_fluid_min
+    dT0 = float(soil.temperature_surface_mean) - T_fluid_min
 
     disc = dT0 ** 2 + 4.0 * a * K
     return 2.0 * K / (dT0 + math.sqrt(disc))
@@ -197,7 +197,7 @@ def _initial_guess_cooling(
     """
     K = _K_factor(P_bhe_W, g_ils, vhe_field, soil, Rb_simple)
     a = float(soil.geothermal_heat_flux) / (2.0 * float(soil.thermal_conductivity))
-    margin = T_fluid_max - float(soil.surface_temperature)
+    margin = T_fluid_max - float(soil.temperature_surface_mean)
 
     disc = margin ** 2 - 4.0 * a * K
     if disc < 0.0:
@@ -212,7 +212,7 @@ def _initial_guess_cooling(
 
 def _T_ground_mean(H: float, soil: Soil) -> float:
     """Mean undisturbed ground temperature along borehole [°C]."""
-    return float(soil.surface_temperature) + float(soil.geothermal_heat_flux) * H / (2.0 * float(soil.thermal_conductivity))
+    return float(soil.temperature_surface_mean) + float(soil.geothermal_heat_flux) * H / (2.0 * float(soil.thermal_conductivity))
 
 
 def _delta_T_ground(
@@ -247,7 +247,7 @@ def _T_fluid_heat_at_H(
 
     Rb is recomputed with flow/length correction at the current H.
     """
-    field_H = replace(vhe_field, borehole_length=H)
+    field_H = replace(vhe_field, length_borehole=H)
     g = field_H.compute_pygfunctions(times_s=times_s, alpha_m2_s=alpha_m2_s)
     Rb = _rb_corrected(vhe_field, brine, soil, H, m_dot_per_borehole_kg_s)
     q_p = float(P_bhe_W[2]) / (vhe_field.n_boreholes * H)
@@ -269,7 +269,7 @@ def _T_fluid_cool_at_H(
 
     Rb is recomputed with flow/length correction at the current H.
     """
-    field_H = replace(vhe_field, borehole_length=H)
+    field_H = replace(vhe_field, length_borehole=H)
     g = field_H.compute_pygfunctions(times_s=times_s, alpha_m2_s=alpha_m2_s)
     Rb = _rb_corrected(vhe_field, brine, soil, H, m_dot_per_borehole_kg_s)
     q_p = float(P_bhe_W[2]) / (vhe_field.n_boreholes * H)
@@ -423,7 +423,7 @@ def size_borehole_length_heating_cooling(
             vhe_field=vhe_field, brine=brine, soil=soil,
             L_bhe_m=H, m_dot_kg_s=m_dot,
             use_flow_length_correction=True,
-        ).Rb_K_m_W
+        ).thermal_resistance_borehole
 
     # --- Step 1: size for heating ---
     H_heat = size_borehole_length(
@@ -442,10 +442,10 @@ def size_borehole_length_heating_cooling(
     # --- Heating-only: return immediately ---
     if not has_cooling:
         return FieldSizingResult(
-            L_m=H_heat,
-            governing="heating",
-            R_heating_K_m_W=_rb_final(H_heat, m_dot_per_borehole_heat_kg_s),
-            R_cooling_K_m_W=None,
+            length_element=H_heat,
+            governing_mode="heating",
+            thermal_resistance_heating=_rb_final(H_heat, m_dot_per_borehole_heat_kg_s),
+            thermal_resistance_cooling=None,
         )
 
     # --- Step 2: quick check — is cooling already satisfied at H_heat? ---
@@ -454,10 +454,10 @@ def size_borehole_length_heating_cooling(
     )
     if T_cool_at_H_heat <= T_fluid_max:
         return FieldSizingResult(
-            L_m=H_heat,
-            governing="heating",
-            R_heating_K_m_W=_rb_final(H_heat, m_dot_per_borehole_heat_kg_s),
-            R_cooling_K_m_W=_rb_final(H_heat, m_dot_per_borehole_cool_kg_s),
+            length_element=H_heat,
+            governing_mode="heating",
+            thermal_resistance_heating=_rb_final(H_heat, m_dot_per_borehole_heat_kg_s),
+            thermal_resistance_cooling=_rb_final(H_heat, m_dot_per_borehole_cool_kg_s),
         )
 
     # --- Step 3: cooling is binding — ILS bracket then bisect ---
@@ -498,10 +498,10 @@ def size_borehole_length_heating_cooling(
 
     H_cool = 0.5 * (lo + hi)
     return FieldSizingResult(
-        L_m=H_cool,
-        governing="cooling",
-        R_heating_K_m_W=_rb_final(H_cool, m_dot_per_borehole_heat_kg_s),
-        R_cooling_K_m_W=_rb_final(H_cool, m_dot_per_borehole_cool_kg_s),
+        length_element=H_cool,
+        governing_mode="cooling",
+        thermal_resistance_heating=_rb_final(H_cool, m_dot_per_borehole_heat_kg_s),
+        thermal_resistance_cooling=_rb_final(H_cool, m_dot_per_borehole_cool_kg_s),
     )
 
 
@@ -515,10 +515,10 @@ from pythermonet.dimensioning.ground_field import GroundField  # noqa: E402
 @dataclass(frozen=True)
 class FieldSizingResult:
     """Result from the generic ground-field sizing solver."""
-    L_m: float                   # Required element length [m]
-    governing: str               # "heating" or "cooling"
-    R_heating_K_m_W: float       # Effective thermal resistance at L_m, heating flow
-    R_cooling_K_m_W: float | None
+    length_element: float              # [m]
+    governing_mode: str                # "heating" or "cooling"
+    thermal_resistance_heating: float  # [K·m/W]
+    thermal_resistance_cooling: float | None  # [K·m/W]
 
 
 # ---------------------------------------------------------------------------
@@ -758,10 +758,10 @@ def size_ground_field_length_heating_cooling(
 
     if not has_cooling:
         return FieldSizingResult(
-            L_m=L_heat,
-            governing="heating",
-            R_heating_K_m_W=field.R_at_L(L_heat, m_dot_per_element_heat, brine, soil),
-            R_cooling_K_m_W=None,
+            length_element=L_heat,
+            governing_mode="heating",
+            thermal_resistance_heating=field.R_at_L(L_heat, m_dot_per_element_heat, brine, soil),
+            thermal_resistance_cooling=None,
         )
 
     # Step 2: check cooling at L_heat
@@ -770,10 +770,10 @@ def size_ground_field_length_heating_cooling(
     )
     if T_cool_at_L_heat <= T_fluid_max:
         return FieldSizingResult(
-            L_m=L_heat,
-            governing="heating",
-            R_heating_K_m_W=field.R_at_L(L_heat, m_dot_per_element_heat, brine, soil),
-            R_cooling_K_m_W=field.R_at_L(L_heat, m_dot_per_element_cool, brine, soil),
+            length_element=L_heat,
+            governing_mode="heating",
+            thermal_resistance_heating=field.R_at_L(L_heat, m_dot_per_element_heat, brine, soil),
+            thermal_resistance_cooling=field.R_at_L(L_heat, m_dot_per_element_cool, brine, soil),
         )
 
     # Step 3: cooling governs — bisect
@@ -815,8 +815,8 @@ def size_ground_field_length_heating_cooling(
 
     L_cool = 0.5 * (lo + hi)
     return FieldSizingResult(
-        L_m=L_cool,
-        governing="cooling",
-        R_heating_K_m_W=field.R_at_L(L_cool, m_dot_per_element_heat, brine, soil),
-        R_cooling_K_m_W=field.R_at_L(L_cool, m_dot_per_element_cool, brine, soil),
+        length_element=L_cool,
+        governing_mode="cooling",
+        thermal_resistance_heating=field.R_at_L(L_cool, m_dot_per_element_heat, brine, soil),
+        thermal_resistance_cooling=field.R_at_L(L_cool, m_dot_per_element_cool, brine, soil),
     )

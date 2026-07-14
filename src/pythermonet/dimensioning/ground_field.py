@@ -100,7 +100,7 @@ class GroundField(ABC):
         sizing: subtract for heating (cold winter), add for cooling (hot summer).
 
         BHE: 0.0 — the seasonal signal is fully attenuated at borehole depth.
-        HHE: A(D) = surface_temperature_amplitude · exp(−D/δ),  δ = √(2α/ω).
+        HHE: A(D) = temperature_surface_amplitude · exp(−D/δ),  δ = √(2α/ω).
         """
 
     @abstractmethod
@@ -152,13 +152,13 @@ class BHEGroundField(GroundField):
         return self._field.n_boreholes
 
     def T_undisturbed(self, L: float, soil: Soil) -> float:
-        return float(soil.surface_temperature) + float(soil.geothermal_heat_flux) * L / (2.0 * float(soil.thermal_conductivity))
+        return float(soil.temperature_surface_mean) + float(soil.geothermal_heat_flux) * L / (2.0 * float(soil.thermal_conductivity))
 
     def T_gradient(self, soil: Soil) -> float:
         return float(soil.geothermal_heat_flux) / (2.0 * float(soil.thermal_conductivity))
 
     def compute_gfunction(self, L: float, times_s: np.ndarray, alpha: float) -> np.ndarray:
-        return replace(self._field, borehole_length=L).compute_pygfunctions(
+        return replace(self._field, length_borehole=L).compute_pygfunctions(
             times_s=times_s, alpha_m2_s=alpha
         )
 
@@ -167,14 +167,14 @@ class BHEGroundField(GroundField):
             vhe_field=self._field, brine=brine, soil=soil,
             L_bhe_m=L, m_dot_kg_s=m_dot_per_element,
             use_flow_length_correction=True,
-        ).Rb_K_m_W
+        ).thermal_resistance_borehole
 
     def R_simple(self, m_dot_per_element: float, brine: HeatCarrier, soil: Soil) -> float:
         return compute_rb_for_vhe_field(
             vhe_field=self._field, brine=brine, soil=soil,
             L_bhe_m=1.0, m_dot_kg_s=m_dot_per_element,
             use_flow_length_correction=False,
-        ).Rb_K_m_W
+        ).thermal_resistance_borehole
 
     def seasonal_amplitude(self, soil: Soil) -> float:
         return 0.0
@@ -183,8 +183,8 @@ class BHEGroundField(GroundField):
         return float(soil.thermal_conductivity)
 
     def ils_gfunction(self, times_s: np.ndarray, alpha: float) -> np.ndarray:
-        r_b = float(self._field.r_b_m)
-        xy = np.array(self._field.xy_m, dtype=float)
+        r_b = float(self._field.radius_borehole)
+        xy = np.array(self._field.xy_coords, dtype=float)
         N = self._field.n_boreholes
         TWO_PI = 2.0 * math.pi
 
@@ -233,32 +233,32 @@ class HHEGroundField(GroundField):
         soil_thermal_conductivity_heating: float,
         soil_thermal_conductivity_cooling: float | None = None,
     ) -> None:
-        if len(pipe_infrastructure.trace_segments) != 1:
+        if len(pipe_infrastructure.segments_trace) != 1:
             raise ValueError(
                 "HHEGroundField currently only supports single-segment traces "
                 "(straight parallel pipes). Got "
-                f"{len(pipe_infrastructure.trace_segments)} segments."
+                f"{len(pipe_infrastructure.segments_trace)} segments."
             )
         self._pi = pipe_infrastructure
         self._soil_thermal_conductivity_heating = float(soil_thermal_conductivity_heating)
         self._soil_thermal_conductivity_cooling = float(soil_thermal_conductivity_cooling) if soil_thermal_conductivity_cooling is not None else float(soil_thermal_conductivity_heating)
-        self._seg = pipe_infrastructure.trace_segments[0]
+        self._seg = pipe_infrastructure.segments_trace[0]
 
     @property
     def n_elements(self) -> int:
-        return self._pi.n_parallel_pipes
+        return self._pi.n_pipes_parallel
 
     def T_undisturbed(self, L: float, soil: Soil) -> float:
         # Horizontal pipe: undisturbed temperature at burial depth, no L dependence
         D = float(self._pi.burial_depth)
-        return float(soil.surface_temperature) + float(soil.geothermal_heat_flux) * D / (2.0 * float(soil.thermal_conductivity))
+        return float(soil.temperature_surface_mean) + float(soil.geothermal_heat_flux) * D / (2.0 * float(soil.thermal_conductivity))
 
     def T_gradient(self, soil: Soil) -> float:
         return 0.0
 
     def compute_gfunction(self, L: float, times_s: np.ndarray, alpha: float) -> np.ndarray:
         new_seg = PipeSegment(
-            outer_diameter=self._seg.outer_diameter,
+            diameter_outer=self._seg.diameter_outer,
             sdr=self._seg.sdr,
             material=self._seg.material,
             roughness=self._seg.roughness,
@@ -266,12 +266,17 @@ class HHEGroundField(GroundField):
             length=L,
         )
         new_pi = PipeInfrastructure(
-            n_parallel_pipes=self._pi.n_parallel_pipes,
-            trace_segments=[new_seg],
-            pipe_distance=self._pi.pipe_distance,
+            n_pipes_parallel=self._pi.n_pipes_parallel,
+            segments_trace=[new_seg],
+            pipe_spacing=self._pi.pipe_spacing,
             burial_depth=self._pi.burial_depth,
         )
-        return hhe.gfunction(new_pi, k_s=self._soil_thermal_conductivity_heating, alpha=alpha, time=np.asarray(times_s))
+        return hhe.gfunction(
+            pipe_infrastructure=new_pi,
+            soil_thermal_conductivity=self._soil_thermal_conductivity_heating,
+            soil_thermal_diffusivity=alpha,
+            evaluation_times=np.asarray(times_s),
+        )
 
     def R_at_L(self, L: float, m_dot_per_element: float, brine: HeatCarrier, soil: Soil) -> float:
         return self._r_pipe(m_dot_per_element, brine)
@@ -281,7 +286,7 @@ class HHEGroundField(GroundField):
 
     def _r_pipe(self, m_dot: float, brine: HeatCarrier) -> float:
         """Pipe thermal resistance per unit length [K·m/W]: wall + convective."""
-        Do = float(self._seg.outer_diameter)
+        Do = float(self._seg.diameter_outer)
         Di = Do * (1.0 - 2.0 / float(self._seg.sdr))
         k_pipe = float(self._seg.material.thermal_conductivity)
 
@@ -307,7 +312,7 @@ class HHEGroundField(GroundField):
         omega = 2.0 * math.pi / (365.25 * 24.0 * 3600.0)
         delta = math.sqrt(2.0 * alpha / omega)
         D = float(self._pi.burial_depth)
-        return float(soil.surface_temperature_amplitude) * math.exp(-D / delta)
+        return float(soil.temperature_surface_amplitude) * math.exp(-D / delta)
 
     def k_s_eff(self, soil: Soil) -> float:
         return self._soil_thermal_conductivity_heating
@@ -320,9 +325,9 @@ class HHEGroundField(GroundField):
 
     def ils_gfunction(self, times_s: np.ndarray, alpha: float) -> np.ndarray:
         """ILS g averaged over N parallel horizontal pipes at lateral spacing d."""
-        r_pipe = float(self._seg.outer_diameter) / 2.0
-        N = self._pi.n_parallel_pipes
-        d = float(self._pi.pipe_distance or 0.0)
+        r_pipe = float(self._seg.diameter_outer) / 2.0
+        N = self._pi.n_pipes_parallel
+        d = float(self._pi.pipe_spacing or 0.0)
         TWO_PI = 2.0 * math.pi
 
         g = np.zeros(len(times_s))
