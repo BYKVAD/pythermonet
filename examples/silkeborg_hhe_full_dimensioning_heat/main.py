@@ -29,27 +29,27 @@ topology_file  = PROJECT_DIR / "data/silkeborg_hhe_topology_dimensioned.dat"
 # 1) Define materials, brine, soil
 # -----------------------------------------------------------------------------
 pipe_material_dist = Material(
-    rho=975,
-    c=1900,
-    thermalCond=0.4,
+    density=975,
+    specific_heat=1900,
+    thermal_conductivity=0.4,
 )
 
 brine = HeatCarrier(
-    rho=965,
-    c=4450,
-    thermalCond=0.45,
-    dynamicViscosity=5e-3,
+    density=965,
+    specific_heat=4450,
+    thermal_conductivity=0.45,
+    dynamic_viscosity=5e-3,
 )
 
 soil = Soil(
-    rho=2500,
-    c=1000,
-    thermalCond=1.25,
-    thermalCondShallowHeating=1.25,
-    thermalCondShallowCooling=1.25,
-    Qgeo=0.0185,
-    surfaceTemp=9.03,
-    surfaceTempAmp=7.9,
+    density=2500,
+    specific_heat=1000,
+    thermal_conductivity=1.25,
+    thermal_conductivity_shallow_heating=1.25,
+    thermal_conductivity_shallow_cooling=1.25,
+    geothermal_heat_flux=0.0185,
+    temperature_surface_mean=9.03,
+    temperature_surface_amplitude=7.9,
 )
 
 # -----------------------------------------------------------------------------
@@ -70,25 +70,25 @@ _, hydraulic = read_dimensioned_topology_tsv_to_hydraulic(
 hhe_pipe_material = pipe_material_dist
 
 hhe_segment = PipeSegment(
-    outerDiameter=0.040,    # 40 mm OD
-    SDR=17.0,
+    diameter_outer=0.040,   # 40 mm OD
+    sdr=17.0,
     material=hhe_pipe_material,
-    roughnessHeight=1e-6,
-    ID=0,
+    roughness=1e-6,
+    id_=0,
     length=100.0,           # placeholder — will be sized
 )
 
 pipe_infrastructure = PipeInfrastructure(
-    NParallelPipes=20,      # 10 loops (outgoing + return)
-    traceSegments=[hhe_segment],
-    pipeDistance=1.5,       # lateral spacing between pipes [m]
-    burialDepth=1.2,        # m
+    n_pipes_parallel=20,      # 10 loops (outgoing + return)
+    segments_trace=[hhe_segment],
+    pipe_spacing=1.5,        # lateral spacing between pipes [m]
+    burial_depth=1.2,        # m
 )
 
 hhe_field = HHEGroundField(
     pipe_infrastructure=pipe_infrastructure,
-    k_s=float(soil.thermalCondShallowHeating),
-    k_s_cooling=float(soil.thermalCondShallowCooling),
+    soil_thermal_conductivity_heating=float(soil.thermal_conductivity_shallow_heating),
+    soil_thermal_conductivity_cooling=float(soil.thermal_conductivity_shallow_cooling),
 )
 
 # -----------------------------------------------------------------------------
@@ -101,11 +101,11 @@ loads = ground_loads_from_district(
     brine,
     f_peak_heating=1.0,
     f_peak_cooling=1.0,
-    peak_heating_h=4.0,
-    peak_cooling_h=4.0,
+    peak_hours_heating=4.0,
+    peak_hours_cooling=4.0,
 )
 
-sizing = SizingParameters(time_horizon_years=30.0)
+sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
 
 # -----------------------------------------------------------------------------
 # 5) Brine temperature limits

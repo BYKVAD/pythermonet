@@ -5,73 +5,73 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True, slots=True)
 class HeatPump:
-    ID: int
+    id_: int
 
     # Loads [W] (sink-side: heating delivered, cooling delivered)
-    annualHeatingLoad: float
-    winterHeatingLoad: float
-    peakHeatingLoad: float
+    load_annual_heating: float
+    load_winter_heating: float
+    load_peak_heating: float
 
-    annualSCOP: float
-    winterSCOP: float
-    peakCOP: float
+    scop_annual: float
+    scop_winter: float
+    cop_peak: float
 
-    deltaTHeating: float  # [K] brine ΔT in heating (local HP assumption)
+    temperature_delta_heating: float  # [K] brine ΔT in heating (local HP assumption)
 
-    annualCoolingLoad: float
-    summerCoolingLoad: float
-    peakCoolingLoad: float
+    load_annual_cooling: float
+    load_summer_cooling: float
+    load_peak_cooling: float
 
-    EER: float
-    deltaTCooling: float  # [K] brine ΔT in cooling (local HP assumption)
+    eer: float
+    temperature_delta_cooling: float  # [K] brine ΔT in cooling (local HP assumption)
 
     # --- computed once, used everywhere ---
-    annualHeating_ground_load: float = field(init=False)   # [W], + extracted from ground
-    winterHeating_ground_load: float = field(init=False)
-    peakHeating_ground_load: float = field(init=False)
+    load_ground_annual_heating: float = field(init=False)   # [W], + extracted from ground
+    load_ground_winter_heating: float = field(init=False)
+    load_ground_peak_heating: float = field(init=False)
 
-    annualCooling_ground_load: float = field(init=False)   # [W], + rejected to ground (active cooling convention)
-    summerCooling_ground_load: float = field(init=False)
-    peakCooling_ground_load: float = field(init=False)
+    load_ground_annual_cooling: float = field(init=False)   # [W], + rejected to ground (active cooling convention)
+    load_ground_summer_cooling: float = field(init=False)
+    load_ground_peak_cooling: float = field(init=False)
 
     def __post_init__(self) -> None:
         # --- basic validation (fail fast) ---
-        if self.annualHeatingLoad < 0 or self.winterHeatingLoad < 0 or self.peakHeatingLoad < 0:
+        if self.load_annual_heating < 0 or self.load_winter_heating < 0 or self.load_peak_heating < 0:
             raise ValueError("Heating loads must be >= 0")
 
-        if self.annualSCOP <= 0 or self.winterSCOP <= 0 or self.peakCOP <= 0:
+        if self.scop_annual <= 0 or self.scop_winter <= 0 or self.cop_peak <= 0:
             raise ValueError("COP/SCOP must be > 0")
 
-        if self.deltaTHeating <= 0:
-            raise ValueError("deltaTHeating must be > 0")
+        if self.temperature_delta_heating <= 0:
+            raise ValueError("temperature_delta_heating must be > 0")
 
-        if self.annualCoolingLoad < 0 or self.summerCoolingLoad < 0 or self.peakCoolingLoad < 0:
+        if self.load_annual_cooling < 0 or self.load_summer_cooling < 0 or self.load_peak_cooling < 0:
             raise ValueError("Cooling loads must be >= 0")
 
-        has_cooling = self.peakCoolingLoad > 0
+        has_cooling = self.load_peak_cooling > 0
 
         if has_cooling:
-            if self.EER <= 0:
-                raise ValueError("EER must be > 0 when peakCoolingLoad > 0")
-            if self.deltaTCooling <= 0:
-                raise ValueError("deltaTCooling must be > 0 when peakCoolingLoad > 0")
+            if self.eer <= 0:
+                raise ValueError("eer must be > 0 when load_peak_cooling > 0")
+            if self.temperature_delta_cooling <= 0:
+                raise ValueError("temperature_delta_cooling must be > 0 when load_peak_cooling > 0")
 
         # 1) Ground loads (heating)
         # Antagelse: HeatingLoad er leveret til bygning (sink-side).
         # El-forbrug = P_load / COP
         # Ground extraction = P_load - P_el = P_load*(1 - 1/COP)
-        object.__setattr__(self, "peakHeating_ground_load",   self.peakHeatingLoad   * (1.0 - 1.0 / self.peakCOP))
-        object.__setattr__(self, "winterHeating_ground_load", self.winterHeatingLoad * (1.0 - 1.0 / self.winterSCOP))
-        object.__setattr__(self, "annualHeating_ground_load", self.annualHeatingLoad * (1.0 - 1.0 / self.annualSCOP))
+        object.__setattr__(self, "load_ground_peak_heating",   self.load_peak_heating   * (1.0 - 1.0 / self.cop_peak))
+        object.__setattr__(self, "load_ground_winter_heating", self.load_winter_heating * (1.0 - 1.0 / self.scop_winter))
+        object.__setattr__(self, "load_ground_annual_heating", self.load_annual_heating * (1.0 - 1.0 / self.scop_annual))
 
         # 2) Ground loads (cooling) – aktiv køling konvention
         # Hvis CoolingLoad er køleeffekt leveret (fjernet fra bygning),
-        # så er varmeafgivelse til jord: P_reject = P_cool + P_el = P_cool*(1 + 1/EER)
+        # så er varmeafgivelse til jord: P_reject = P_cool + P_el = P_cool*(1 + 1/eer)
         if has_cooling:
-            object.__setattr__(self, "peakCooling_ground_load",   self.peakCoolingLoad   * (1.0 + 1.0 / self.EER))
-            object.__setattr__(self, "summerCooling_ground_load", self.summerCoolingLoad * (1.0 + 1.0 / self.EER))
-            object.__setattr__(self, "annualCooling_ground_load", self.annualCoolingLoad * (1.0 + 1.0 / self.EER))
+            object.__setattr__(self, "load_ground_peak_cooling",   self.load_peak_cooling   * (1.0 + 1.0 / self.eer))
+            object.__setattr__(self, "load_ground_summer_cooling", self.load_summer_cooling * (1.0 + 1.0 / self.eer))
+            object.__setattr__(self, "load_ground_annual_cooling", self.load_annual_cooling * (1.0 + 1.0 / self.eer))
         else:
-            object.__setattr__(self, "peakCooling_ground_load",   0.0)
-            object.__setattr__(self, "summerCooling_ground_load", 0.0)
-            object.__setattr__(self, "annualCooling_ground_load", 0.0)
+            object.__setattr__(self, "load_ground_peak_cooling",   0.0)
+            object.__setattr__(self, "load_ground_summer_cooling", 0.0)
+            object.__setattr__(self, "load_ground_annual_cooling", 0.0)

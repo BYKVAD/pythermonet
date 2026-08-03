@@ -19,9 +19,9 @@ from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
 @dataclass(frozen=True)
 class ProjectInputs:
     pipe_catalogue: list[Annulus]
-    d_pipes_m: np.ndarray
+    diameters_outer_catalogue: np.ndarray
     network: DistributionNetwork
-    heat_pump_list: list[HeatPump]
+    heat_pumps: list[HeatPump]
 
 
 def load_project_inputs(
@@ -31,31 +31,31 @@ def load_project_inputs(
     heat_pump_file: str | Path,
     source_heat_carrier: HeatCarrier,
     pipe_material: Material,
-    roughness_height: float,
+    roughness: float,
     burial_depth: float,
     pipe_distance: float | None,
     n_parallel_pipes: int = 2,
 ) -> ProjectInputs:
     pipe_catalogue = read_pipe_catalogue(pipe_catalogue_file)
-    d_pipes_m = np.asarray(
-        sorted({a.outerDiameter for a in pipe_catalogue}),
+    catalogue_outer_diameters = np.asarray(
+        sorted({a.diameter_outer for a in pipe_catalogue}),
         dtype=float,
     )
 
     network = read_undimensioned_topology_tsv_to_network(
         str(topology_file),
         pipe_material=pipe_material,
-        roughness_height=roughness_height,
+        roughness=roughness,
         burial_depth=burial_depth,
         pipe_distance=pipe_distance,
         n_parallel_pipes=n_parallel_pipes,
     )
 
-    heat_pump_list = read_heat_pumps_tsv(path=str(heat_pump_file))
+    heat_pumps = read_heat_pumps_tsv(path=str(heat_pump_file))
 
     return ProjectInputs(
         pipe_catalogue=pipe_catalogue,
-        d_pipes_m=d_pipes_m,
+        diameters_outer_catalogue=catalogue_outer_diameters,
         network=network,
-        heat_pump_list=heat_pump_list,
+        heat_pumps=heat_pumps,
     )

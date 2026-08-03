@@ -45,21 +45,24 @@ _EXAMPLE_DIR = (
 @pytest.fixture(scope="module")
 def hhe_dimensioning():
     """Return result from the Silkeborg HHE full-dimensioning run."""
-    pipe_material_dist = Material(rho=975, c=1900, thermalCond=0.4)
+    pipe_material_dist = Material(
+        density=975, specific_heat=1900, thermal_conductivity=0.4
+    )
 
     brine = HeatCarrier(
-        rho=965, c=4450, thermalCond=0.45, dynamicViscosity=5e-3
+        density=965, specific_heat=4450,
+        thermal_conductivity=0.45, dynamic_viscosity=5e-3,
     )
 
     soil = Soil(
-        rho=2500,
-        c=1000,
-        thermalCond=1.25,
-        thermalCondShallowHeating=1.25,
-        thermalCondShallowCooling=1.25,
-        Qgeo=0.0185,
-        surfaceTemp=9.03,
-        surfaceTempAmp=7.9,
+        density=2500,
+        specific_heat=1000,
+        thermal_conductivity=1.25,
+        thermal_conductivity_shallow_heating=1.25,
+        thermal_conductivity_shallow_cooling=1.25,
+        geothermal_heat_flux=0.0185,
+        temperature_surface_mean=9.03,
+        temperature_surface_amplitude=7.9,
     )
 
     _, hydraulic = read_dimensioned_topology_tsv_to_hydraulic(
@@ -72,19 +75,23 @@ def hhe_dimensioning():
     )
 
     hhe_segment = PipeSegment(
-        outerDiameter=0.040, SDR=17.0, material=pipe_material_dist,
-        roughnessHeight=1e-6, ID=0, length=100.0,
+        diameter_outer=0.040, sdr=17.0, material=pipe_material_dist,
+        roughness=1e-6, id_=0, length=100.0,
     )
     pipe_infrastructure = PipeInfrastructure(
-        NParallelPipes=20,
-        traceSegments=[hhe_segment],
-        pipeDistance=1.5,
-        burialDepth=1.2,
+        n_pipes_parallel=20,
+        segments_trace=[hhe_segment],
+        pipe_spacing=1.5,
+        burial_depth=1.2,
     )
     hhe_field = HHEGroundField(
         pipe_infrastructure=pipe_infrastructure,
-        k_s=float(soil.thermalCondShallowHeating),
-        k_s_cooling=float(soil.thermalCondShallowCooling),
+        soil_thermal_conductivity_heating=float(
+            soil.thermal_conductivity_shallow_heating
+        ),
+        soil_thermal_conductivity_cooling=float(
+            soil.thermal_conductivity_shallow_cooling
+        ),
     )
 
     agg_load_input = read_aggregated_load_tsv(
@@ -95,11 +102,11 @@ def hhe_dimensioning():
         brine,
         f_peak_heating=1.0,
         f_peak_cooling=1.0,
-        peak_heating_h=4.0,
-        peak_cooling_h=4.0,
+        peak_hours_heating=4.0,
+        peak_hours_cooling=4.0,
     )
 
-    sizing = SizingParameters(time_horizon_years=30.0)
+    sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
 
     result = run_hhe_sizing_workflow(
         ground_loads=loads,
@@ -126,48 +133,49 @@ class TestHHEThermalDimensioning:
         # sizing.L_m is the one-way pipe segment length;
         # the printed "loop length" is 2 × L_m = 220.98 m.
         result = hhe_dimensioning
-        L = result.sizing.L_m
+        L = result.sizing.length_element
         assert abs(L - 110.49) < 0.5, (
             f"HHE segment length {L:.2f} m deviates >0.5 m from 110.49 m"
         )
 
     def test_governing_mode_heating(self, hhe_dimensioning):
         result = hhe_dimensioning
-        assert result.sizing.governing == "heating", (
-            f"Expected governing='heating', got '{result.sizing.governing}'"
+        assert result.sizing.governing_mode == "heating", (
+            f"Expected governing='heating', got '{result.sizing.governing_mode}'"
         )
 
     def test_distribution_fraction_heating(self, hhe_dimensioning):
         result = hhe_dimensioning
-        f = result.dist_thermal_heat.F_total
+        f = result.performance_thermonet_heating.load_supply_fraction
         assert abs(f * 100 - 35.2) < 0.5, (
-            f"Dist. fraction (heating) = {f*100:.1f}% deviates >0.5% from 35.2%"
+            f"Dist. fraction (heating) = {f*100:.1f}%"
+            " deviates >0.5% from 35.2%"
         )
 
     def test_hhe_pressure_drop_heating(self, hhe_dimensioning):
         result = hhe_dimensioning
-        dp = result.hhe_dp_heat_Pa
+        dp = result.pressure_loss_hhe_heating
         assert abs(dp - 9_490) < 200, (
             f"HHE ΔP (heating) = {dp:.0f} Pa deviates >200 Pa from 9,490 Pa"
         )
 
     def test_system_temperature_heating_annual(self, hhe_dimensioning):
         result = hhe_dimensioning
-        T = result.T_avg_heat_annual_C
+        T = result.temperature_system_annual_heating
         assert abs(T - 0.22) < 0.05, (
             f"T_avg_heat_annual = {T:.2f}°C deviates >0.05°C from 0.22°C"
         )
 
     def test_system_temperature_heating_winter(self, hhe_dimensioning):
         result = hhe_dimensioning
-        T = result.T_avg_heat_winter_C
+        T = result.temperature_system_winter_heating
         assert abs(T - (-2.14)) < 0.05, (
             f"T_avg_heat_winter = {T:.2f}°C deviates >0.05°C from -2.14°C"
         )
 
     def test_system_temperature_heating_peak(self, hhe_dimensioning):
         result = hhe_dimensioning
-        T = result.T_avg_heat_peak_C
+        T = result.temperature_system_peak_heating
         assert abs(T - (-4.50)) < 0.05, (
             f"T_avg_heat_peak = {T:.2f}°C deviates >0.05°C from -4.50°C"
         )
@@ -175,6 +183,6 @@ class TestHHEThermalDimensioning:
     def test_no_cooling_results(self, hhe_dimensioning):
         """Heat-only case should have no cooling sizing results."""
         result = hhe_dimensioning
-        assert result.sizing.R_cooling_K_m_W is None
-        assert result.hhe_dp_cool_Pa is None
-        assert result.T_avg_cool_annual_C is None
+        assert result.sizing.thermal_resistance_cooling is None
+        assert result.pressure_loss_hhe_cooling is None
+        assert result.temperature_system_annual_cooling is None

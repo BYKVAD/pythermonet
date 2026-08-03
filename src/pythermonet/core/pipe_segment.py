@@ -3,5 +3,5 @@ from .pipe import Pipe
 
 @dataclass
 class PipeSegment(Pipe):
-    ID: int
+    id_: int
     length: float                # m

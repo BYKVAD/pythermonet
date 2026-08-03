@@ -50,48 +50,55 @@ def bhe_dimensioning():
     """Return (hydraulic, result) from the Silkeborg BHE full-dimensioning run."""
     pipe_catalogue = read_pipe_catalogue(_PIPE_CATALOGUE)
 
-    pipe_material_dist = Material(rho=975, c=1900, thermalCond=0.4)
+    pipe_material_dist = Material(
+        density=975, specific_heat=1900, thermal_conductivity=0.4
+    )
 
     brine = HeatCarrier(
-        rho=965, c=4450, thermalCond=0.45, dynamicViscosity=5e-3
+        density=965, specific_heat=4450,
+        thermal_conductivity=0.45, dynamic_viscosity=5e-3,
     )
 
     soil = Soil(
-        rho=2500,
-        c=1000,
-        thermalCond=2.36,
-        thermalCondShallowHeating=1.25,
-        thermalCondShallowCooling=1.25,
-        Qgeo=0.0185,
-        surfaceTemp=9.03,
-        surfaceTempAmp=7.9,
+        density=2500,
+        specific_heat=1000,
+        thermal_conductivity=2.36,
+        thermal_conductivity_shallow_heating=1.25,
+        thermal_conductivity_shallow_cooling=1.25,
+        geothermal_heat_flux=0.0185,
+        temperature_surface_mean=9.03,
+        temperature_surface_amplitude=7.9,
     )
 
     network = read_undimensioned_topology_tsv_to_network(
         _EXAMPLE_DIR / "data" / "silkeborg_topology.dat",
         pipe_material=pipe_material_dist,
-        roughness_height=1e-6,
+        roughness=1e-6,
         burial_depth=1.2,
         pipe_distance=0.3,
         n_parallel_pipes=2,
     )
 
     # Borehole field
-    grout         = Material(rho=1500, c=2e3, thermalCond=1.75)
-    pipe_mat_bhe  = Material(rho=1000, c=2e3, thermalCond=0.4)
-    borehole      = Annulus(outerDiameter=0.152, SDR=1000.0)
+    grout = Material(
+        density=1500, specific_heat=2e3, thermal_conductivity=1.75
+    )
+    pipe_mat_bhe = Material(
+        density=1000, specific_heat=2e3, thermal_conductivity=0.4
+    )
+    borehole = Annulus(diameter_outer=0.152, sdr=1000.0)
     upipe = PipeSegment(
-        outerDiameter=0.04, SDR=11.0, material=pipe_mat_bhe,
-        roughnessHeight=1e-6, ID=0, length=100,
+        diameter_outer=0.04, sdr=11.0, material=pipe_mat_bhe,
+        roughness=1e-6, id_=0, length=100,
     )
     n_boreholes = 6
-    spacing_m   = 15.0
+    spacing_m = 15.0
     bhe_field = VHEField(
-        ID=1, HE="1U",
+        id_=1, heat_exchanger_type="1U",
         pipe=upipe, borehole=borehole, grout=grout,
         coordinates=[[0.0, i * spacing_m] for i in range(n_boreholes)],
-        shankSpacing=0.015 + 2 * 0.02,
-        H_m=120.0, D_m=1.0,
+        shank_spacing=0.015 + 2 * 0.02,
+        length_borehole=120.0, burial_depth=1.0,
         tilt_rad=0.0, orientation_rad=0.0,
     )
 
@@ -101,15 +108,15 @@ def bhe_dimensioning():
     loads = ground_loads_from_heat_pumps(
         hp_list,
         brine,
-        peak_heating_h=4.0,
+        peak_hours_heating=4.0,
         peak_fraction_heating_mode="incremental",
         peak_fraction_heating=1.0,
-        peak_cooling_h=4.0,
+        peak_hours_cooling=4.0,
         peak_fraction_cooling_mode="incremental",
         peak_fraction_cooling=1.0,
     )
 
-    sizing = SizingParameters(time_horizon_years=30.0)
+    sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
 
     hydraulic = run_pipedimensioning(pipe_catalogue, brine, network, hp_list)
 
@@ -145,9 +152,9 @@ _REF_RE_COOL  = [11871, 9862, 6259, 5144, 2698, 2698]
 
 class TestHydraulicDimensioning:
 
-    def test_pipe_outer_diameters(self, bhe_dimensioning):
+    def test_diameters_outer(self, bhe_dimensioning):
         hydraulic, _ = bhe_dimensioning
-        od_mm = hydraulic.outer_diameter * 1e3
+        od_mm = hydraulic.diameters_outer * 1e3
         np.testing.assert_allclose(
             od_mm, _REF_OD_MM, atol=0.1,
             err_msg="Pipe OD selection differs from reference",
@@ -156,14 +163,14 @@ class TestHydraulicDimensioning:
     def test_reynolds_heating(self, bhe_dimensioning):
         hydraulic, _ = bhe_dimensioning
         np.testing.assert_allclose(
-            hydraulic.Re_heating, _REF_RE_HEAT, rtol=0.01,
+            hydraulic.reynolds_numbers_heating, _REF_RE_HEAT, rtol=0.01,
             err_msg="Heating Reynolds numbers differ from reference",
         )
 
     def test_reynolds_cooling(self, bhe_dimensioning):
         hydraulic, _ = bhe_dimensioning
         np.testing.assert_allclose(
-            hydraulic.Re_cooling, _REF_RE_COOL, rtol=0.01,
+            hydraulic.reynolds_numbers_cooling, _REF_RE_COOL, rtol=0.01,
             err_msg="Cooling Reynolds numbers differ from reference",
         )
 
@@ -181,57 +188,58 @@ class TestBHEThermalDimensioning:
 
     def test_borehole_length(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        assert abs(result.sizing.L_m - 168.98) < 0.5, (
-            f"Borehole length {result.sizing.L_m:.2f} m deviates >0.5 m from 168.98 m"
+        assert abs(result.sizing.length_element - 168.98) < 0.5, (
+            f"Borehole length {result.sizing.length_element:.2f} m"
+            " deviates >0.5 m from 168.98 m"
         )
 
     def test_governing_mode_cooling(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        assert result.sizing.governing == "cooling"
+        assert result.sizing.governing_mode == "cooling"
 
     def test_borehole_resistance_heating(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        rb = result.sizing.R_heating_K_m_W
+        rb = result.sizing.thermal_resistance_heating
         assert abs(rb - 0.1339) < 0.002, (
             f"Rb (heating) = {rb:.4f} K·m/W deviates >0.002 from 0.1339"
         )
 
     def test_borehole_resistance_cooling(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        rb = result.sizing.R_cooling_K_m_W
+        rb = result.sizing.thermal_resistance_cooling
         assert abs(rb - 0.1248) < 0.002, (
             f"Rb (cooling) = {rb:.4f} K·m/W deviates >0.002 from 0.1248"
         )
 
     def test_distribution_fraction_heating(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        f = result.dist_thermal_heat.F_total
+        f = result.performance_thermonet_heating.load_supply_fraction
         assert abs(f * 100 - 36.8) < 0.5
 
     def test_distribution_fraction_cooling(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        f = result.dist_thermal_cool.F_total
+        f = result.performance_thermonet_cooling.load_supply_fraction
         assert abs(f * 100 - 26.7) < 0.5
 
     def test_system_temperature_heating_annual(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        T = result.sys_temps.T_avg_heat_annual_C
+        T = result.temperatures_system.temperature_system_mean_annual_heating
         assert abs(T - 3.54) < 0.05
 
     def test_system_temperature_heating_winter(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        T = result.sys_temps.T_avg_heat_winter_C
+        T = result.temperatures_system.temperature_system_mean_winter_heating
         assert abs(T - (-0.41)) < 0.05
 
     def test_system_temperature_heating_peak(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        T = result.sys_temps.T_avg_heat_peak_C
+        T = result.temperatures_system.temperature_system_mean_peak_heating
         assert abs(T - (-2.59)) < 0.05
 
     def test_bhe_pressure_drop_heating(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        assert abs(result.bhe_dp_heat_Pa - 78_524) < 500
+        assert abs(result.pressure_loss_bhe_heating - 78_524) < 500
 
     def test_bhe_pressure_drop_cooling(self, bhe_dimensioning):
         _, result = bhe_dimensioning
-        assert abs(result.bhe_dp_cool_Pa - 155_427) < 1000
+        assert abs(result.pressure_loss_bhe_cooling - 155_427) < 1000

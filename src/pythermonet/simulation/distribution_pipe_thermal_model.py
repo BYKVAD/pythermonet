@@ -20,27 +20,34 @@ class PipeGroup:
     Fysisk og hydraulisk input for én rørgruppe.
     Alle størrelser i SI.
     """
-    ID: int
-    L_m: float
-    Di_m: float
-    Do_m: float
-    Re: float
-    k_pipe_W_mK: float
-    burial_depth_m: float
+    id_: int
+    length: float                       # [m]
+    diameter_inner: float               # [m]
+    diameter_outer: float               # [m]
+    reynolds_number: float
+    thermal_conductivity_pipe: float    # [W/m/K]
+    burial_depth: float                 # [m]
     n_parallel_pipes: int
     n_traces: int
-    pipe_spacing_m: float | None = None
+    pipe_spacing: float | None = None   # [m]
 
 
 @dataclass(frozen=True)
 class ModeInput:
     """
     Input for én driftstilstand, fx heating eller cooling.
+
+    temperature_heat_pump_inlet : float
+        Brine temperature at the heat pump inlet — the design limit temperature
+        (minimum for heating, maximum for cooling) [°C].
+    temperature_heat_pump_outlet : float
+        Brine temperature at the heat pump outlet — more extreme than the inlet
+        by the heat pump delta-T (lower for heating, higher for cooling) [°C].
     """
-    times_s: np.ndarray
-    powers_W: np.ndarray
-    Ti_C: float
-    To_C: float
+    pulse_timescales: np.ndarray  # [s]
+    pulse_loads: np.ndarray       # [W]
+    temperature_heat_pump_inlet: float   # [°C]
+    temperature_heat_pump_outlet: float  # [°C]
 
 
 @dataclass(frozen=True)
@@ -51,8 +58,8 @@ class DistributionPipeModel:
     brine: HeatCarrier
     soil: Soil
 
-    T0_C: float
-    surface_amp_C: float
+    temperature_ground_undisturbed: float   # [°C]
+    temperature_surface_amplitude: float    # [°C]
 
     pipe_groups: list[PipeGroup]
 
@@ -61,13 +68,26 @@ class DistributionPipeModel:
 
 
 @dataclass(frozen=True)
-class ModeResult:
+class ThermonetPerformance:
     """
-    Resultat for én mode.
+    Thermal performance of the thermonet distribution pipes for one operational mode.
+
+    Attributes
+    ----------
+    temperatures_mean : ndarray, shape (3,)
+        Volume-weighted mean brine temperature in the distribution pipe network
+        at [annual, seasonal, peak] sizing timescales [°C].
+        Does not include BHE or HHE sources — only the thermonet pipes.
+    load_supply_fraction : float
+        Fraction of the total ground load supplied by the thermonet pipes
+        through heat exchange with the surrounding soil. Used to reduce the
+        BHE or HHE sizing load.
+    load_supply_fractions_per_group : ndarray
+        Same fraction broken down per pipe group.
     """
-    T_dimv_C: np.ndarray
-    F_total: float
-    F_per_group: np.ndarray
+    temperatures_mean: np.ndarray              # [°C]
+    load_supply_fraction: float
+    load_supply_fractions_per_group: np.ndarray
 
 
 # -----------------------------
@@ -75,45 +95,45 @@ class ModeResult:
 # -----------------------------
 
 def _validate_mode_input(mode_input: ModeInput, mode_name: str) -> tuple[np.ndarray, np.ndarray]:
-    times = np.asarray(mode_input.times_s, dtype=float)
-    powers = np.asarray(mode_input.powers_W, dtype=float)
+    times = np.asarray(mode_input.pulse_timescales, dtype=float)
+    powers = np.asarray(mode_input.pulse_loads, dtype=float)
 
     if times.ndim != 1:
-        raise ValueError(f"{mode_name}: times_s must be a 1D array")
+        raise ValueError(f"{mode_name}: pulse_timescales must be a 1D array")
     if powers.ndim != 1:
-        raise ValueError(f"{mode_name}: powers_W must be a 1D array")
+        raise ValueError(f"{mode_name}: pulse_loads must be a 1D array")
     if times.shape != powers.shape:
-        raise ValueError(f"{mode_name}: times_s and powers_W must have same shape")
+        raise ValueError(f"{mode_name}: pulse_timescales and pulse_loads must have same shape")
     if times.size < 1:
-        raise ValueError(f"{mode_name}: times_s and powers_W must have length >= 1")
+        raise ValueError(f"{mode_name}: pulse_timescales and pulse_loads must have length >= 1")
     if np.any(times <= 0):
-        raise ValueError(f"{mode_name}: all times_s must be > 0")
+        raise ValueError(f"{mode_name}: all pulse_timescales must be > 0")
 
     return times, powers
 
 
 def _validate_pipe_group(pg: PipeGroup) -> None:
-    if pg.L_m <= 0:
-        raise ValueError(f"PipeGroup ID={pg.ID}: L_m must be > 0")
-    if pg.Di_m <= 0 or pg.Do_m <= 0:
-        raise ValueError(f"PipeGroup ID={pg.ID}: Di_m and Do_m must be > 0")
-    if pg.Do_m < pg.Di_m:
-        raise ValueError(f"PipeGroup ID={pg.ID}: Do_m must be >= Di_m")
-    if pg.burial_depth_m < 0:
-        raise ValueError(f"PipeGroup ID={pg.ID}: burial_depth_m must be >= 0")
+    if pg.length <= 0:
+        raise ValueError(f"PipeGroup ID={pg.id_}: length must be > 0")
+    if pg.diameter_inner <= 0 or pg.diameter_outer <= 0:
+        raise ValueError(f"PipeGroup ID={pg.id_}: diameter_inner and diameter_outer must be > 0")
+    if pg.diameter_outer < pg.diameter_inner:
+        raise ValueError(f"PipeGroup ID={pg.id_}: diameter_outer must be >= diameter_inner")
+    if pg.burial_depth < 0:
+        raise ValueError(f"PipeGroup ID={pg.id_}: burial_depth must be >= 0")
     if pg.n_parallel_pipes not in (1, 2):
         raise ValueError(
-            f"PipeGroup ID={pg.ID}: only one- and two-pipe systems are supported "
+            f"PipeGroup ID={pg.id_}: only one- and two-pipe systems are supported "
             f"(n_parallel_pipes must be 1 or 2)"
         )
     if pg.n_traces <= 0:
-        raise ValueError(f"PipeGroup ID={pg.ID}: n_traces must be > 0")
-    if pg.n_parallel_pipes == 2 and pg.pipe_spacing_m is None:
+        raise ValueError(f"PipeGroup ID={pg.id_}: n_traces must be > 0")
+    if pg.n_parallel_pipes == 2 and pg.pipe_spacing is None:
         raise ValueError(
-            f"PipeGroup ID={pg.ID}: pipe_spacing_m must be set when n_parallel_pipes == 2"
+            f"PipeGroup ID={pg.id_}: pipe_spacing must be set when n_parallel_pipes == 2"
         )
-    if pg.pipe_spacing_m is not None and pg.pipe_spacing_m <= 0:
-        raise ValueError(f"PipeGroup ID={pg.ID}: pipe_spacing_m must be > 0 when provided")
+    if pg.pipe_spacing is not None and pg.pipe_spacing <= 0:
+        raise ValueError(f"PipeGroup ID={pg.id_}: pipe_spacing must be > 0 when provided")
 
 
 def _validate_model(model: DistributionPipeModel) -> None:
@@ -132,14 +152,14 @@ def _prandtl(brine: HeatCarrier) -> float:
     """
     Pr = mu * cp / k
     """
-    return float(brine.dynamicViscosity * brine.c / brine.thermalCond)
+    return float(brine.dynamic_viscosity * brine.specific_heat / brine.thermal_conductivity)
 
 
 def _shallow_k(soil: Soil, mode: str) -> float:
     if mode == "heating":
-        k = float(soil.thermalCondShallowHeating)
+        k = float(soil.thermal_conductivity_shallow_heating)
     elif mode == "cooling":
-        k = float(soil.thermalCondShallowCooling)
+        k = float(soil.thermal_conductivity_shallow_cooling)
     else:
         raise ValueError("mode must be 'heating' or 'cooling'")
 
@@ -154,11 +174,11 @@ def _soil_diffusivity_shallow(soil: Soil, mode: str) -> float:
     a = k / (rho * cp)
     """
     k = _shallow_k(soil, mode)
-    rho = float(soil.rho)
-    cp = float(soil.c)
+    rho = float(soil.density)
+    cp = float(soil.specific_heat)
 
     if rho <= 0 or cp <= 0:
-        raise ValueError(f"Soil rho and c must be > 0. Got rho={rho}, c={cp}.")
+        raise ValueError(f"Soil density and specific_heat must be > 0. Got density={rho}, specific_heat={cp}.")
 
     return float(k / (rho * cp))
 
@@ -256,102 +276,102 @@ def _compute_mode(
     mode_input: ModeInput,
     *,
     mode: str,
-) -> ModeResult:
-    times_s, powers_W = _validate_mode_input(mode_input, mode)
+) -> ThermonetPerformance:
+    pulse_timescales, pulse_loads = _validate_mode_input(mode_input, mode)
 
     Pr = _prandtl(model.brine)
     a_s = _soil_diffusivity_shallow(model.soil, mode)
     k_s = _shallow_k(model.soil, mode)
 
-    dP = _delta_p(powers_W)
+    dP = _delta_p(pulse_loads)
 
-    Ti_C = float(mode_input.Ti_C)
-    To_C = float(mode_input.To_C)
+    Ti_C = float(mode_input.temperature_heat_pump_inlet)
+    To_C = float(mode_input.temperature_heat_pump_outlet)
     Tm_C = 0.5 * (Ti_C + To_C)
 
     n_groups = len(model.pipe_groups)
-    n_times = times_s.size
+    n_times = pulse_timescales.size
 
-    F_per_group = np.zeros(n_groups, dtype=float)
+    load_supply_fractions_per_group = np.zeros(n_groups, dtype=float)
     T_volume_weighted = np.zeros((n_groups, n_times), dtype=float)
 
     total_volume_m3 = 0.0
 
     for i, pg in enumerate(model.pipe_groups):
         TP_C = _temp_penalty_at_depth(
-            surface_amp_C=model.surface_amp_C,
-            depth_m=pg.burial_depth_m,
+            surface_amp_C=model.temperature_surface_amplitude,
+            depth_m=pg.burial_depth,
             diffusivity_m2_s=a_s,
         )
 
         R_pipe = pipe_thermal_resistance(
-            Di=float(pg.Di_m),
-            Do=float(pg.Do_m),
-            Re=float(pg.Re),
+            Di=float(pg.diameter_inner),
+            Do=float(pg.diameter_outer),
+            Re=float(pg.reynolds_number),
             Pr=float(Pr),
-            k_fluid=float(model.brine.thermalCond),
-            k_pipe=float(pg.k_pipe_W_mK),
+            k_fluid=float(model.brine.thermal_conductivity),
+            k_pipe=float(pg.thermal_conductivity_pipe),
         )
 
         K1 = _bundle_k1(
             diffusivity_m2_s=a_s,
-            times_s=times_s,
-            depth_m=pg.burial_depth_m,
+            times_s=pulse_timescales,
+            depth_m=pg.burial_depth,
             n_parallel_pipes=pg.n_parallel_pipes,
-            spacing_m=pg.pipe_spacing_m,
+            spacing_m=pg.pipe_spacing,
         )
 
         G_grid = csm(
-            float(pg.Do_m) / 2.0,
-            float(pg.Do_m) / 2.0,
-            times_s,
+            float(pg.diameter_outer) / 2.0,
+            float(pg.diameter_outer) / 2.0,
+            pulse_timescales,
             a_s,
         ) + K1
 
-        kernel = ((G_grid / k_s) + R_pipe) / float(pg.L_m) / float(pg.n_traces)
+        kernel = ((G_grid / k_s) + R_pipe) / float(pg.length) / float(pg.n_traces)
         denom = float(np.dot(dP, kernel))
 
         numerator, tp_sign = _mode_numerator(
-            T0_C=float(model.T0_C),
+            T0_C=float(model.temperature_ground_undisturbed),
             Tm_C=Tm_C,
             TP_C=TP_C,
             mode=mode,
         )
 
         F_i = float(numerator / denom)
-        F_per_group[i] = F_i
+        load_supply_fractions_per_group[i] = F_i
 
-        T_seq_C = float(model.T0_C) + tp_sign * TP_C - F_i * np.cumsum(dP * kernel)
-     
-        volume_m3 = float(pg.n_traces) * float(pg.L_m) * math.pi * float(pg.Di_m) ** 2 / 4.0
+        T_seq_C = float(model.temperature_ground_undisturbed) + tp_sign * TP_C - F_i * np.cumsum(dP * kernel)
+
+        volume_m3 = float(pg.n_traces) * float(pg.length) * math.pi * float(pg.diameter_inner) ** 2 / 4.0
         total_volume_m3 += volume_m3
         T_volume_weighted[i, :] = T_seq_C * volume_m3
 
-    T_dimv_C = np.sum(T_volume_weighted, axis=0) / float(total_volume_m3)
-    F_total = float(np.sum(F_per_group))
+    temperatures_mean = np.sum(T_volume_weighted, axis=0) / float(total_volume_m3)
+    load_supply_fraction = float(np.sum(load_supply_fractions_per_group))
 
-    return ModeResult(
-        T_dimv_C=T_dimv_C,
-        F_total=F_total,
-        F_per_group=F_per_group,
+    return ThermonetPerformance(
+        temperatures_mean=temperatures_mean,
+        load_supply_fraction=load_supply_fraction,
+        load_supply_fractions_per_group=load_supply_fractions_per_group,
     )
 
 
 def compute_distribution_pipe_thermal_response(
     model: DistributionPipeModel,
-) -> dict[str, ModeResult]:
+) -> dict[str, ThermonetPerformance]:
     """
     Hoved-entry point.
 
     Returnerer:
         {
-            "heating": ModeResult(...),
-            "cooling": ModeResult(...),   # kun hvis cooling er angivet
+            "heating": ThermonetPerformance(...),
+            "cooling": ThermonetPerformance(...),   # kun hvis cooling er angivet
         }
     """
     _validate_model(model)
 
-    results: dict[str, ModeResult] = {
+    results: dict[str, ThermonetPerformance] = {
         "heating": _compute_mode(model, model.heating, mode="heating")
     }
 

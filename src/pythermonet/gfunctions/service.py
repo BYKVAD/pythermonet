@@ -10,11 +10,11 @@ from .pygfunction_impl import compute_gvalues_pygfunction
 def _hash_request(req: GFunctionRequest) -> str:
     # Stabil hash uden at være afhængig af numpy repræsentation tilfældigt
     payload = {
-        "times_s": np.asarray(req.times_s, dtype=float).tolist(),
-        "alpha_m2_s": float(req.alpha_m2_s),
+        "evaluation_times": np.asarray(req.evaluation_times, dtype=float).tolist(),
+        "thermal_diffusivity_soil": float(req.thermal_diffusivity_soil),
         "method": req.method,
         "boundary_condition": req.boundary_condition,
-        "options": req.options or {},
+        "pygfunction_options": req.pygfunction_options or {},
         "boreholes_signature": getattr(req.boreholes, "signature", None),
     }
     blob = json.dumps(payload, sort_keys=True).encode("utf-8")

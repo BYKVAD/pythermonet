@@ -12,19 +12,19 @@ from ..core.material import Material
 
 @dataclass(frozen=True, slots=True)
 class VHEField:
-    ID: int
-    HE: str
+    id_: int
     pipe: PipeSegment
     borehole: Annulus
     grout: Material
     coordinates: Sequence[Sequence[float]]
-    shankSpacing: float
+    shank_spacing: float   # m
 
-    H_m: float
-    D_m: float
+    length_borehole: float  # m
+    burial_depth: float     # m
     use_z_as_depth: bool = False
     tilt_rad: float = 0.0
     orientation_rad: float = 0.0
+    heat_exchanger_type: str = "1U"  # e.g. "1U", "2U", "CX" — stored for future use, not yet active in calculations
 
     def __post_init__(self) -> None:
         coords = np.asarray(self.coordinates, dtype=float)
@@ -42,28 +42,28 @@ class VHEField:
             raise ValueError("borehole must not be None.")
         if self.grout is None:
             raise ValueError("grout must not be None.")
-        if self.shankSpacing <= 0.0:
-            raise ValueError("shankSpacing must be > 0.")
+        if self.shank_spacing <= 0.0:
+            raise ValueError("shank_spacing must be > 0.")
 
-        if self.H_m <= 0.0:
-            raise ValueError("H_m must be > 0.")
-        if self.D_m < 0.0:
-            raise ValueError("D_m must be >= 0.")
+        if self.length_borehole <= 0.0:
+            raise ValueError("borehole_length must be > 0.")
+        if self.burial_depth < 0.0:
+            raise ValueError("burial_depth must be >= 0.")
 
         object.__setattr__(
             self,
             "coordinates",
             tuple(tuple(float(v) for v in row) for row in coords),
         )
-        object.__setattr__(self, "shankSpacing", float(self.shankSpacing))
-        object.__setattr__(self, "H_m", float(self.H_m))
-        object.__setattr__(self, "D_m", float(self.D_m))
+        object.__setattr__(self, "shank_spacing", float(self.shank_spacing))
+        object.__setattr__(self, "length_borehole", float(self.length_borehole))
+        object.__setattr__(self, "burial_depth", float(self.burial_depth))
         object.__setattr__(self, "use_z_as_depth", bool(self.use_z_as_depth))
         object.__setattr__(self, "tilt_rad", float(self.tilt_rad))
         object.__setattr__(self, "orientation_rad", float(self.orientation_rad))
 
     @property
-    def ndim(self) -> int:
+    def n_dims(self) -> int:
         return len(self.coordinates[0])
 
     @property
@@ -71,30 +71,34 @@ class VHEField:
         return len(self.coordinates)
 
     @property
-    def x_m(self) -> tuple[float, ...]:
+    def x_coords(self) -> tuple[float, ...]:
+        """X-coordinate of each borehole [m]."""
         return tuple(row[0] for row in self.coordinates)
 
     @property
-    def y_m(self) -> tuple[float, ...]:
+    def y_coords(self) -> tuple[float, ...]:
+        """Y-coordinate of each borehole [m]."""
         return tuple(row[1] for row in self.coordinates)
 
     @property
-    def z_m(self) -> tuple[float, ...] | None:
-        if self.ndim == 3:
+    def z_coords(self) -> tuple[float, ...] | None:
+        """Z-coordinate of each borehole [m], or None if coordinates are 2D."""
+        if self.n_dims == 3:
             return tuple(row[2] for row in self.coordinates)
         return None
 
     @property
-    def xy_m(self) -> tuple[tuple[float, float], ...]:
+    def xy_coords(self) -> tuple[tuple[float, float], ...]:
+        """(X, Y) coordinates of each borehole [m]."""
         return tuple((row[0], row[1]) for row in self.coordinates)
 
     @property
-    def r_b_m(self) -> float:
-        """Borehole radius [m], derived from borehole.outerDiameter."""
-        return float(self.borehole.outerDiameter) / 2.0
+    def radius_borehole(self) -> float:
+        """Borehole radius [m], derived from borehole.diameter_outer."""
+        return float(self.borehole.diameter_outer) / 2.0
 
     def to_pygfunction_boreholes(self) -> list[gt.boreholes.Borehole]:
-        xy = np.asarray(self.xy_m, dtype=float)
+        xy = np.asarray(self.xy_coords, dtype=float)
         unique_xy = np.unique(xy, axis=0)
         if len(unique_xy) != len(xy):
             raise ValueError(
@@ -115,13 +119,13 @@ class VHEField:
                     )
                 D_use = float(row[2])
             else:
-                D_use = self.D_m
+                D_use = self.burial_depth
 
             boreholes.append(
                 gt.boreholes.Borehole(
-                    H=self.H_m,
+                    H=self.length_borehole,
                     D=D_use,
-                    r_b=self.r_b_m,
+                    r_b=self.radius_borehole,
                     x=x,
                     y=y,
                     tilt=self.tilt_rad,
@@ -169,7 +173,7 @@ class VHEField:
         boundary_condition: str = "UHTR",
         options: dict | None = None,
     ) -> np.ndarray:
-        alpha_m2_s = float(soil.thermalCond) / (float(soil.rho) * float(soil.c))
+        alpha_m2_s = float(soil.thermal_conductivity) / (float(soil.density) * float(soil.specific_heat))
 
         return self.compute_gfunctions(
             times_s=times_s,

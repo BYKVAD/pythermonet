@@ -8,33 +8,32 @@ from pythermonet.core.material import Material
 
 @dataclass(frozen=True, slots=True)
 class DistributionNetwork:
-    infrastructure: PipeInfrastructure
-    trace_names: list[str]
-    hp_id_trace: list[np.ndarray]
-    max_pressure_loss_trace: np.ndarray
-    SDR: np.ndarray
-    L_traces: np.ndarray
-    N_traces: np.ndarray
+    pipe_infrastructure: PipeInfrastructure
+    names_trace: list[str]
+    heat_pump_ids_trace: list[np.ndarray]
+    pressure_losses_max_trace: np.ndarray
+    sdr: np.ndarray
+    lengths_trace: np.ndarray
+    counts_trace: np.ndarray
 
-    globalMaterial: Material | None = None  # sættes automatisk
+    material_pipe: Material | None = None  # shared pipe material — must be identical across all trace segments
 
     def __post_init__(self) -> None:
-        segments = self.infrastructure.traceSegments
+        segments = self.pipe_infrastructure.segments_trace
 
         if len(segments) == 0:
-            raise ValueError("No traceSegments in infrastructure.")
+            raise ValueError("No segments_trace in infrastructure.")
 
         first = segments[0].material
-        k0 = first.thermalCond
-        rho0 = first.rho  # eller hvad din anden property hedder
-        c0 = first.c
+        k0 = first.thermal_conductivity
+        rho0 = first.density  # eller hvad din anden property hedder
+        c0 = first.specific_heat
 
         for seg in segments[1:]:
             mat = seg.material
-            if mat.thermalCond != k0 or mat.rho != rho0 or mat.c != c0:
+            if mat.thermal_conductivity != k0 or mat.density != rho0 or mat.specific_heat != c0:
                 raise ValueError(
                     "All pipe materials must have identical thermal properties."
                 )
 
-        # sæt globalMaterial til første
-        object.__setattr__(self, "globalMaterial", first)
+        object.__setattr__(self, "material_pipe", first)

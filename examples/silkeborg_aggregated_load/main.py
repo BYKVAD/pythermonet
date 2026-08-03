@@ -24,24 +24,24 @@ topology_file = PROJECT_DIR / "data/silkeborg_topology_dimensioned_heat.dat"
 # -----------------------------------------------------------------------------
 # 1) Materials, brine, soil
 # -----------------------------------------------------------------------------
-pipe_material = Material(rho=975, c=1900, thermalCond=0.4)
+pipe_material = Material(density=975, specific_heat=1900, thermal_conductivity=0.4)
 
 brine = HeatCarrier(
-    rho=965,
-    c=4450,
-    thermalCond=0.45,
-    dynamicViscosity=5e-3,
+    density=965,
+    specific_heat=4450,
+    thermal_conductivity=0.45,
+    dynamic_viscosity=5e-3,
 )
 
 soil = Soil(
-    rho=2650,
-    c=1000,
-    thermalCond=2.36,
-    thermalCondShallowHeating=1.25,
-    thermalCondShallowCooling=1.25,
-    Qgeo=0.0185,
-    surfaceTemp=9.03,
-    surfaceTempAmp=7.9,
+    density=2650,
+    specific_heat=1000,
+    thermal_conductivity=2.36,
+    thermal_conductivity_shallow_heating=1.25,
+    thermal_conductivity_shallow_cooling=1.25,
+    geothermal_heat_flux=0.0185,
+    temperature_surface_mean=9.03,
+    temperature_surface_amplitude=7.9,
 )
 
 # -----------------------------------------------------------------------------
@@ -63,28 +63,28 @@ n_boreholes = 6
 spacing_m   = 15.0
 coordinates = [[0.0, i * spacing_m] for i in range(n_boreholes)]
 
-pipe_material_bhe = Material(rho=1000, c=2e3, thermalCond=0.4)
-grout    = Material(rho=1500, c=2e3, thermalCond=1.75)
-borehole = Annulus(outerDiameter=0.152, SDR=1000.0)
+pipe_material_bhe = Material(density=1000, specific_heat=2e3, thermal_conductivity=0.4)
+grout    = Material(density=1500, specific_heat=2e3, thermal_conductivity=1.75)
+borehole = Annulus(diameter_outer=0.152, sdr=1000.0)
 upipe    = PipeSegment(
-    outerDiameter=0.04,
-    SDR=11.0,
+    diameter_outer=0.04,
+    sdr=11.0,
     material=pipe_material_bhe,
-    roughnessHeight=1e-6,
-    ID=0,
+    roughness=1e-6,
+    id_=0,
     length=100,  # placeholder
 )
 
 BHEfield = VHEField(
-    ID=1,
-    HE="1U",
+    id_=1,
+    heat_exchanger_type="1U",
     pipe=upipe,
     borehole=borehole,
     grout=grout,
     coordinates=coordinates,
-    shankSpacing=0.015 + 2 * 0.02,
-    H_m=120.0,
-    D_m=0,
+    shank_spacing=0.015 + 2 * 0.02,
+    length_borehole=120.0,
+    burial_depth=0,
     tilt_rad=0.0,
     orientation_rad=0.0,
 )
@@ -99,11 +99,11 @@ loads = ground_loads_from_district(
     brine,
     f_peak_heating=1.0,
     f_peak_cooling=1.0,
-    peak_heating_h=4.0,
-    peak_cooling_h=4.0,
+    peak_hours_heating=4.0,
+    peak_hours_cooling=4.0,
 )
 
-sizing = SizingParameters(time_horizon_years=30.0)
+sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
 
 # -----------------------------------------------------------------------------
 # 5) Brine temperature limits
