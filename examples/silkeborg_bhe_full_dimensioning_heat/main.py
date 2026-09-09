@@ -9,7 +9,7 @@ from pythermonet.components.ground_loads import ground_loads_from_heat_pumps
 from pythermonet.core.material import Material
 from pythermonet.core.heat_carrier import HeatCarrier
 from pythermonet.core.soil import Soil
-from pythermonet.input.read_pipe_catalogue import read_pipe_catalogue
+from pythermonet.input.read_pipe_catalog import read_pipe_catalog
 from pythermonet.input.read_topology import read_undimensioned_topology_tsv_to_network
 from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
 from pythermonet.dimensioning.hydraulic_dimensioning import run_pipedimensioning
@@ -25,17 +25,15 @@ from pythermonet.dimensioning.sizing_parameters import SizingParameters
 # Paths
 # -----------------------------------------------------------------------------
 PROJECT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = PROJECT_DIR.parents[2]
 
-pipe_catalogue_file = REPO_ROOT / "PythermonetII/src/pythermonet/resources/pipe_catalogue.csv"
 heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat_high_cool.dat"
 topology_file = PROJECT_DIR / "data/silkeborg_topology.dat"
 
 
 # -----------------------------------------------------------------------------
-# 1) Read pipe catalogue, define materials + fluids + soil
+# 1) Read pipe catalog, define materials + fluids + soil
 # -----------------------------------------------------------------------------
-pipe_catalogue = read_pipe_catalogue(pipe_catalogue_file)
+pipe_catalog = read_pipe_catalog()
 
 pipe_material_dist = Material(
     density=975,
@@ -137,7 +135,7 @@ T_BRINE_MAX_COOL = 20.0   # HP condenser inlet limit [°C]
 # 6) Hydraulic pipe network sizing (mode-specific)
 # -----------------------------------------------------------------------------
 hydraulic = run_pipedimensioning(
-    pipe_catalogue,
+    pipe_catalog,
     brine,
     distribution_network_undimensioned,
     hp_list,

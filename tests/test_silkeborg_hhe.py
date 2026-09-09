@@ -1,8 +1,8 @@
 """
 test_silkeborg_hhe.py
----------------------
+----------------------
 Regression tests for the Silkeborg HHE full-dimensioning example
-(heat only, pre-dimensioned topology, aggregated load).
+(heat + cooling, undimensioned topology).
 
 Reference values were captured from:
   examples/silkeborg_hhe_full_dimensioning_heat/main.py
@@ -12,10 +12,11 @@ Run with:
 """
 from __future__ import annotations
 
+import numpy as np
 import pytest
-from pathlib import Path
 
-from pythermonet.components.ground_loads import ground_loads_from_district
+from conftest import EXAMPLES_DIR
+from pythermonet.components.ground_loads import ground_loads_from_heat_pumps
 from pythermonet.components.pipe_infrastructure import PipeInfrastructure
 from pythermonet.core.heat_carrier import HeatCarrier
 from pythermonet.core.material import Material
@@ -23,20 +24,16 @@ from pythermonet.core.pipe_segment import PipeSegment
 from pythermonet.core.soil import Soil
 from pythermonet.dimensioning.ground_field import HHEGroundField
 from pythermonet.dimensioning.HHE.hhe_workflow import run_hhe_sizing_workflow
+from pythermonet.dimensioning.hydraulic_dimensioning import run_pipedimensioning
 from pythermonet.dimensioning.sizing_parameters import SizingParameters
-from pythermonet.input.read_aggregated_load import read_aggregated_load_tsv
-from pythermonet.input.read_dimensioned_topology import (
-    read_dimensioned_topology_tsv_to_hydraulic,
-)
+from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
+from pythermonet.input.read_pipe_catalog import read_pipe_catalog
+from pythermonet.input.read_topology import read_undimensioned_topology_tsv_to_network
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_EXAMPLE_DIR = (
-    Path(__file__).resolve().parents[1]
-    / "examples"
-    / "silkeborg_hhe_full_dimensioning_heat"
-)
+_EXAMPLE_HHE_DIR = EXAMPLES_DIR / "silkeborg_hhe_full_dimensioning_heat"
 
 # ---------------------------------------------------------------------------
 # Module-scoped fixture — runs the full dimensioning once for all tests.
@@ -44,7 +41,9 @@ _EXAMPLE_DIR = (
 
 @pytest.fixture(scope="module")
 def hhe_dimensioning():
-    """Return result from the Silkeborg HHE full-dimensioning run."""
+    """Return (hydraulic, result) from the Silkeborg HHE full-dimensioning run."""
+    pipe_catalog = read_pipe_catalog()
+
     pipe_material_dist = Material(
         density=975, specific_heat=1900, thermal_conductivity=0.4
     )
@@ -65,10 +64,10 @@ def hhe_dimensioning():
         temperature_surface_amplitude=7.9,
     )
 
-    _, hydraulic = read_dimensioned_topology_tsv_to_hydraulic(
-        _EXAMPLE_DIR / "data" / "silkeborg_hhe_topology_dimensioned.dat",
+    network = read_undimensioned_topology_tsv_to_network(
+        _EXAMPLE_HHE_DIR / "data" / "silkeborg_topology.dat",
         pipe_material=pipe_material_dist,
-        brine=brine,
+        roughness=1e-6,
         burial_depth=1.2,
         pipe_distance=0.3,
         n_parallel_pipes=2,
@@ -94,19 +93,23 @@ def hhe_dimensioning():
         ),
     )
 
-    agg_load_input = read_aggregated_load_tsv(
-        _EXAMPLE_DIR / "data" / "silkeborg_hhe_aggregated_load_heat.dat"
+    hp_list = read_heat_pumps_tsv(
+        path=_EXAMPLE_HHE_DIR / "data" / "silkeborg_heat_pump_heat_only.dat"
     )
-    loads = ground_loads_from_district(
-        agg_load_input,
+    loads = ground_loads_from_heat_pumps(
+        hp_list,
         brine,
-        f_peak_heating=1.0,
-        f_peak_cooling=1.0,
         peak_hours_heating=4.0,
+        peak_fraction_heating_mode="incremental",
+        peak_fraction_heating=1.0,
         peak_hours_cooling=4.0,
+        peak_fraction_cooling_mode="incremental",
+        peak_fraction_cooling=1.0,
     )
 
     sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
+
+    hydraulic = run_pipedimensioning(pipe_catalog, brine, network, hp_list)
 
     result = run_hhe_sizing_workflow(
         ground_loads=loads,
@@ -120,7 +123,48 @@ def hhe_dimensioning():
         T_brine_max_cool=20.0,
     )
 
-    return result
+    return hydraulic, result
+
+
+# ---------------------------------------------------------------------------
+# Reference values (from example output)
+# ---------------------------------------------------------------------------
+
+# Trace order: Main_line, Inner_distribution_ring_1, Inner_distribution_ring_2,
+#              Single_branch, Connection_pipes (x2)
+
+_REF_OD_MM   = [90.0, 75.0, 63.0, 63.0, 40.0, 50.0]
+_REF_RE_HEAT = [9714, 7586, 5413, 3926, 2162, 2882]
+_REF_RE_COOL = [7254, 5917, 3726, 3062, 1686, 1349]
+
+
+# ===========================================================================
+# Hydraulic dimensioning tests
+# ===========================================================================
+
+class TestHydraulicDimensioning:
+
+    def test_diameters_outer(self, hhe_dimensioning):
+        hydraulic, _ = hhe_dimensioning
+        od_mm = hydraulic.diameters_outer * 1e3
+        np.testing.assert_allclose(
+            od_mm, _REF_OD_MM, atol=0.1,
+            err_msg="Pipe OD selection differs from reference",
+        )
+
+    def test_reynolds_heating(self, hhe_dimensioning):
+        hydraulic, _ = hhe_dimensioning
+        np.testing.assert_allclose(
+            hydraulic.reynolds_numbers_heating, _REF_RE_HEAT, rtol=0.01,
+            err_msg="Heating Reynolds numbers differ from reference",
+        )
+
+    def test_reynolds_cooling(self, hhe_dimensioning):
+        hydraulic, _ = hhe_dimensioning
+        np.testing.assert_allclose(
+            hydraulic.reynolds_numbers_cooling, _REF_RE_COOL, rtol=0.01,
+            err_msg="Cooling Reynolds numbers differ from reference",
+        )
 
 
 # ===========================================================================
@@ -130,59 +174,88 @@ def hhe_dimensioning():
 class TestHHEThermalDimensioning:
 
     def test_loop_length(self, hhe_dimensioning):
-        # sizing.L_m is the one-way pipe segment length;
-        # the printed "loop length" is 2 × L_m = 220.98 m.
-        result = hhe_dimensioning
+        # sizing.length_element is the one-way pipe segment length;
+        # the printed "loop length" is 2 × length_element = 221.81 m.
+        _, result = hhe_dimensioning
         L = result.sizing.length_element
-        assert abs(L - 110.49) < 0.5, (
-            f"HHE segment length {L:.2f} m deviates >0.5 m from 110.49 m"
+        assert abs(L - 110.90) < 0.5, (
+            f"HHE segment length {L:.2f} m deviates >0.5 m from 110.90 m"
         )
 
-    def test_governing_mode_heating(self, hhe_dimensioning):
-        result = hhe_dimensioning
-        assert result.sizing.governing_mode == "heating", (
-            f"Expected governing='heating', got '{result.sizing.governing_mode}'"
+    def test_governing_mode_cooling(self, hhe_dimensioning):
+        _, result = hhe_dimensioning
+        assert result.sizing.governing_mode == "cooling", (
+            f"Expected governing='cooling', got '{result.sizing.governing_mode}'"
         )
 
     def test_distribution_fraction_heating(self, hhe_dimensioning):
-        result = hhe_dimensioning
+        _, result = hhe_dimensioning
         f = result.performance_thermonet_heating.load_supply_fraction
-        assert abs(f * 100 - 35.2) < 0.5, (
+        assert abs(f * 100 - 35.5) < 0.5, (
             f"Dist. fraction (heating) = {f*100:.1f}%"
-            " deviates >0.5% from 35.2%"
+            " deviates >0.5% from 35.5%"
+        )
+
+    def test_distribution_fraction_cooling(self, hhe_dimensioning):
+        _, result = hhe_dimensioning
+        f = result.performance_thermonet_cooling.load_supply_fraction
+        assert abs(f * 100 - 33.2) < 0.5, (
+            f"Dist. fraction (cooling) = {f*100:.1f}%"
+            " deviates >0.5% from 33.2%"
         )
 
     def test_hhe_pressure_drop_heating(self, hhe_dimensioning):
-        result = hhe_dimensioning
+        _, result = hhe_dimensioning
         dp = result.pressure_loss_hhe_heating
-        assert abs(dp - 9_490) < 200, (
-            f"HHE ΔP (heating) = {dp:.0f} Pa deviates >200 Pa from 9,490 Pa"
+        assert abs(dp - 9_526) < 200, (
+            f"HHE ΔP (heating) = {dp:.0f} Pa deviates >200 Pa from 9,526 Pa"
+        )
+
+    def test_hhe_pressure_drop_cooling(self, hhe_dimensioning):
+        _, result = hhe_dimensioning
+        dp = result.pressure_loss_hhe_cooling
+        assert abs(dp - 6_602) < 200, (
+            f"HHE ΔP (cooling) = {dp:.0f} Pa deviates >200 Pa from 6,602 Pa"
         )
 
     def test_system_temperature_heating_annual(self, hhe_dimensioning):
-        result = hhe_dimensioning
+        _, result = hhe_dimensioning
         T = result.temperature_system_annual_heating
-        assert abs(T - 0.22) < 0.05, (
-            f"T_avg_heat_annual = {T:.2f}°C deviates >0.05°C from 0.22°C"
+        assert abs(T - 1.98) < 0.05, (
+            f"T_avg_heat_annual = {T:.2f}°C deviates >0.05°C from 1.98°C"
         )
 
     def test_system_temperature_heating_winter(self, hhe_dimensioning):
-        result = hhe_dimensioning
+        _, result = hhe_dimensioning
         T = result.temperature_system_winter_heating
-        assert abs(T - (-2.14)) < 0.05, (
-            f"T_avg_heat_winter = {T:.2f}°C deviates >0.05°C from -2.14°C"
+        assert abs(T - (-1.99)) < 0.05, (
+            f"T_avg_heat_winter = {T:.2f}°C deviates >0.05°C from -1.99°C"
         )
 
     def test_system_temperature_heating_peak(self, hhe_dimensioning):
-        result = hhe_dimensioning
+        _, result = hhe_dimensioning
         T = result.temperature_system_peak_heating
-        assert abs(T - (-4.50)) < 0.05, (
-            f"T_avg_heat_peak = {T:.2f}°C deviates >0.05°C from -4.50°C"
+        assert abs(T - (-4.34)) < 0.05, (
+            f"T_avg_heat_peak = {T:.2f}°C deviates >0.05°C from -4.34°C"
         )
 
-    def test_no_cooling_results(self, hhe_dimensioning):
-        """Heat-only case should have no cooling sizing results."""
-        result = hhe_dimensioning
-        assert result.sizing.thermal_resistance_cooling is None
-        assert result.pressure_loss_hhe_cooling is None
-        assert result.temperature_system_annual_cooling is None
+    def test_system_temperature_cooling_annual(self, hhe_dimensioning):
+        _, result = hhe_dimensioning
+        T = result.temperature_system_annual_cooling
+        assert abs(T - 13.54) < 0.05, (
+            f"T_avg_cool_annual = {T:.2f}°C deviates >0.05°C from 13.54°C"
+        )
+
+    def test_system_temperature_cooling_summer(self, hhe_dimensioning):
+        _, result = hhe_dimensioning
+        T = result.temperature_system_summer_cooling
+        assert abs(T - 13.55) < 0.05, (
+            f"T_avg_cool_summer = {T:.2f}°C deviates >0.05°C from 13.55°C"
+        )
+
+    def test_system_temperature_cooling_peak(self, hhe_dimensioning):
+        _, result = hhe_dimensioning
+        T = result.temperature_system_peak_cooling
+        assert abs(T - 13.94) < 0.05, (
+            f"T_avg_cool_peak = {T:.2f}°C deviates >0.05°C from 13.94°C"
+        )

@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-from pythermonet.components.ground_loads import ground_loads_from_district
+from pythermonet.components.ground_loads import ground_loads_from_heat_pumps
 from pythermonet.components.pipe_infrastructure import PipeInfrastructure
 from pythermonet.core.material import Material
 from pythermonet.core.heat_carrier import HeatCarrier
@@ -13,21 +13,25 @@ from pythermonet.core.pipe_segment import PipeSegment
 from pythermonet.core.soil import Soil
 from pythermonet.dimensioning.ground_field import HHEGroundField
 from pythermonet.dimensioning.HHE.hhe_workflow import run_hhe_sizing_workflow, print_hhe_results
+from pythermonet.dimensioning.hydraulic_dimensioning import run_pipedimensioning
 from pythermonet.dimensioning.sizing_parameters import SizingParameters
-from pythermonet.input.read_dimensioned_topology import read_dimensioned_topology_tsv_to_hydraulic
-from pythermonet.input.read_aggregated_load import read_aggregated_load_tsv
+from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
+from pythermonet.input.read_pipe_catalog import read_pipe_catalog
+from pythermonet.input.read_topology import read_undimensioned_topology_tsv_to_network
 
 # -----------------------------------------------------------------------------
 # Paths
 # -----------------------------------------------------------------------------
 PROJECT_DIR = Path(__file__).resolve().parent
 
-agg_load_file  = PROJECT_DIR / "data/silkeborg_hhe_aggregated_load_heat.dat"
-topology_file  = PROJECT_DIR / "data/silkeborg_hhe_topology_dimensioned.dat"
+heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat_only.dat"
+topology_file = PROJECT_DIR / "data/silkeborg_topology.dat"
 
 # -----------------------------------------------------------------------------
-# 1) Define materials, brine, soil
+# 1) Read pipe catalog, define materials + fluids + soil
 # -----------------------------------------------------------------------------
+pipe_catalog = read_pipe_catalog()
+
 pipe_material_dist = Material(
     density=975,
     specific_heat=1900,
@@ -53,12 +57,12 @@ soil = Soil(
 )
 
 # -----------------------------------------------------------------------------
-# 2) Distribution network (pre-dimensioned — no hydraulic sizing needed)
+# 2) Distribution network
 # -----------------------------------------------------------------------------
-_, hydraulic = read_dimensioned_topology_tsv_to_hydraulic(
+distribution_network_undimensioned = read_undimensioned_topology_tsv_to_network(
     topology_file,
     pipe_material=pipe_material_dist,
-    brine=brine,
+    roughness=1e-6,
     burial_depth=1.2,
     pipe_distance=0.3,
     n_parallel_pipes=2,
@@ -92,17 +96,19 @@ hhe_field = HHEGroundField(
 )
 
 # -----------------------------------------------------------------------------
-# 4) Aggregated heat pump loads
+# 4) Heat pumps
 # -----------------------------------------------------------------------------
-agg_load_input = read_aggregated_load_tsv(agg_load_file)
+hp_list = read_heat_pumps_tsv(path=heat_pump_file)
 
-loads = ground_loads_from_district(
-    agg_load_input,
+loads = ground_loads_from_heat_pumps(
+    hp_list,
     brine,
-    f_peak_heating=1.0,
-    f_peak_cooling=1.0,
     peak_hours_heating=4.0,
+    peak_fraction_heating_mode="incremental",
+    peak_fraction_heating=1.0,
     peak_hours_cooling=4.0,
+    peak_fraction_cooling_mode="incremental",
+    peak_fraction_cooling=1.0,
 )
 
 sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
@@ -114,7 +120,17 @@ T_BRINE_MIN_HEAT = -3.0   # HP evaporator inlet limit [°C]
 T_BRINE_MAX_COOL = 20.0   # HP condenser inlet limit [°C]
 
 # -----------------------------------------------------------------------------
-# 6) HHE sizing workflow + results
+# 6) Hydraulic pipe network sizing (mode-specific)
+# -----------------------------------------------------------------------------
+hydraulic = run_pipedimensioning(
+    pipe_catalog,
+    brine,
+    distribution_network_undimensioned,
+    hp_list,
+)
+
+# -----------------------------------------------------------------------------
+# 7) HHE sizing workflow + results
 # -----------------------------------------------------------------------------
 result = run_hhe_sizing_workflow(
     ground_loads=loads,

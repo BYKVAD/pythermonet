@@ -58,7 +58,7 @@ def read_dimensioned_topology_tsv_to_hydraulic(
     burial_depth : float
         Pipe burial depth [m].
     pipe_distance : float or None
-        Centre-to-centre distance between supply and return pipes [m].
+        Center-to-center distance between supply and return pipes [m].
         Required when n_parallel_pipes == 2.
     n_parallel_pipes : int
         Number of parallel pipes per trace (1 or 2).

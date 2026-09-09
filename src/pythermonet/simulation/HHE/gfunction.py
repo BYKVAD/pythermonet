@@ -126,7 +126,7 @@ class HHEGFunction:
 
         The field is symmetric about its midpoint: pipe i and pipe N-1-i
         have identical temperatures.  Only the first n_half receivers are
-        computed; their contributions are doubled, except for the centre
+        computed; their contributions are doubled, except for the center
         pipe (when N is odd) which is unique and counted once.
         """
         n_pipes = self._n_pipes
@@ -162,7 +162,7 @@ class HHEGFunction:
 
         # Each of the first n_half pipes represents itself and its mirror
         # on the other side of the field — weight 2 for all, except the
-        # centre pipe (last entry when N is odd) which is unique — weight 1.
+        # center pipe (last entry when N is odd) which is unique — weight 1.
         weights = np.full(n_half, 2.0)
         if n_pipes % 2 == 1:
             weights[-1] = 1.0

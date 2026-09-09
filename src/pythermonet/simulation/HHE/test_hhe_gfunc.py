@@ -97,7 +97,7 @@ def fls_gfunc_single(
     g = 0.5 * (1/L) * integral_{-L/2}^{L/2} integral_{-L/2}^{L/2} [...] dxi_r dxi_s
 
     For a long pipe (L >> sqrt(4at)) this approaches the ILS solution.
-    Here we compute the simpler point-evaluation form at the pipe centre:
+    Here we compute the simpler point-evaluation form at the pipe center:
     g_approx = 0.5 * integral_{-L/2}^{L/2} erfc(sqrt(u^2+r^2)/sqrt(4at))/sqrt(u^2+r^2) du
     """
     from scipy.integrate import quad

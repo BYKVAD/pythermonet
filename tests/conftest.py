@@ -12,6 +12,6 @@ _SRC = str(_REPO_ROOT / "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-# Shared resource path used by multiple test modules.
-PIPE_CATALOGUE = _REPO_ROOT / "src" / "pythermonet" / "resources" / "pipe_catalogue.csv"
-EXAMPLES_DIR   = _REPO_ROOT / "examples"
+from pythermonet.resources import PIPE_CATALOG_PATH as PIPE_CATALOG  # noqa: E402
+
+EXAMPLES_DIR = _REPO_ROOT / "examples"

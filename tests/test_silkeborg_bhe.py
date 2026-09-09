@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from pathlib import Path
 
+from conftest import EXAMPLES_DIR
 from pythermonet.components.ground_loads import ground_loads_from_heat_pumps
 from pythermonet.components.vhe_field import VHEField
 from pythermonet.core.annulus import Annulus
@@ -27,19 +27,13 @@ from pythermonet.dimensioning.BHE.bhe_workflow import run_bhe_sizing_workflow
 from pythermonet.dimensioning.hydraulic_dimensioning import run_pipedimensioning
 from pythermonet.dimensioning.sizing_parameters import SizingParameters
 from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
-from pythermonet.input.read_pipe_catalogue import read_pipe_catalogue
+from pythermonet.input.read_pipe_catalog import read_pipe_catalog
 from pythermonet.input.read_topology import read_undimensioned_topology_tsv_to_network
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_EXAMPLE_DIR = (
-    Path(__file__).resolve().parents[1]
-    / "examples"
-    / "silkeborg_bhe_full_dimensioning_heat"
-)
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_PIPE_CATALOGUE = _REPO_ROOT / "src" / "pythermonet" / "resources" / "pipe_catalogue.csv"
+_EXAMPLE_BHE_DIR = EXAMPLES_DIR / "silkeborg_bhe_full_dimensioning_heat"
 
 # ---------------------------------------------------------------------------
 # Module-scoped fixture — runs the full dimensioning once for all tests.
@@ -48,7 +42,7 @@ _PIPE_CATALOGUE = _REPO_ROOT / "src" / "pythermonet" / "resources" / "pipe_catal
 @pytest.fixture(scope="module")
 def bhe_dimensioning():
     """Return (hydraulic, result) from the Silkeborg BHE full-dimensioning run."""
-    pipe_catalogue = read_pipe_catalogue(_PIPE_CATALOGUE)
+    pipe_catalog = read_pipe_catalog()
 
     pipe_material_dist = Material(
         density=975, specific_heat=1900, thermal_conductivity=0.4
@@ -71,7 +65,7 @@ def bhe_dimensioning():
     )
 
     network = read_undimensioned_topology_tsv_to_network(
-        _EXAMPLE_DIR / "data" / "silkeborg_topology.dat",
+        _EXAMPLE_BHE_DIR / "data" / "silkeborg_topology.dat",
         pipe_material=pipe_material_dist,
         roughness=1e-6,
         burial_depth=1.2,
@@ -103,7 +97,7 @@ def bhe_dimensioning():
     )
 
     hp_list = read_heat_pumps_tsv(
-        path=_EXAMPLE_DIR / "data" / "silkeborg_heat_pump_heat_high_cool.dat"
+        path=_EXAMPLE_BHE_DIR / "data" / "silkeborg_heat_pump_heat_high_cool.dat"
     )
     loads = ground_loads_from_heat_pumps(
         hp_list,
@@ -118,7 +112,7 @@ def bhe_dimensioning():
 
     sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
 
-    hydraulic = run_pipedimensioning(pipe_catalogue, brine, network, hp_list)
+    hydraulic = run_pipedimensioning(pipe_catalog, brine, network, hp_list)
 
     result = run_bhe_sizing_workflow(
         ground_loads=loads,

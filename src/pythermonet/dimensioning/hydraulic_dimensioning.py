@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 
 
 def run_pipedimensioning(
-    pipe_catalogue,   # Iterable of pipe catalogue entries (outer_diameter, sdr, ...)
+    pipe_catalog,   # Iterable of pipe catalog entries (outer_diameter, sdr, ...)
     brine,            # HeatCarrier (density, specific_heat, dynamic_viscosity)
     network,          # DistributionNetwork
     heat_pumps,   # list[HeatPump]
@@ -26,8 +26,8 @@ def run_pipedimensioning(
     """
 
     # Sortér unikke outer diameters fra kataloget
-    pipe_catalogue_sorted = np.asarray(
-        sorted({a.diameter_outer for a in pipe_catalogue}),
+    pipe_catalog_sorted = np.asarray(
+        sorted({a.diameter_outer for a in pipe_catalog}),
         dtype=float,
     )
 
@@ -100,7 +100,7 @@ def run_pipedimensioning(
     for i in range(N_trace):
         sdr_i = float(sdr_arr[i])
 
-        candidate_outer_diameters = pipe_catalogue_sorted
+        candidate_outer_diameters = pipe_catalog_sorted
         candidate_inner_diameters = candidate_outer_diameters * (1.0 - 2.0 / sdr_i)
 
         L_tot_i = n_parallel_pipes * float(L_trace_arr[i])
