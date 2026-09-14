@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+
+# Seasonal pulse duration: one quarter-year (~91.3-day heating/cooling season).
+_SECONDS_IN_SEASON: float = 365.25 / 4.0 * 24.0 * 3600.0
 
 
 @dataclass(frozen=True)
@@ -17,10 +20,7 @@ class SizingParameters:
         Design lifetime — the annual pulse extends this far into the future.
     """
 
-    thermal_dimensioning_lifetime: float = 30.0  # [years]
-
-    # Seasonal pulse duration: one quarter-year (≈ 91.3 days = 3-month heating/cooling season).
-    _SECONDS_IN_SEASON: float = field(default=365.25 / 4.0 * 24.0 * 3600.0, init=False, repr=False)
+    thermal_dimensioning_lifetime: float  # [years]
 
     def __post_init__(self) -> None:
         if self.thermal_dimensioning_lifetime <= 0:
@@ -36,7 +36,7 @@ class SizingParameters:
             Peak load pulse duration from HeatPumps [h].
         """
         t_peak = peak_hours_heating * 3600.0
-        t_seasonal = t_peak + self._SECONDS_IN_SEASON
+        t_seasonal = t_peak + _SECONDS_IN_SEASON
         t_annual = t_seasonal + self.thermal_dimensioning_lifetime * 365.25 * 24.0 * 3600.0
         return [t_peak, t_seasonal, t_annual]
 
@@ -53,6 +53,6 @@ class SizingParameters:
         if peak_hours_cooling is None:
             return None
         t_peak = peak_hours_cooling * 3600.0
-        t_seasonal = t_peak + self._SECONDS_IN_SEASON
+        t_seasonal = t_peak + _SECONDS_IN_SEASON
         t_annual = t_seasonal + self.thermal_dimensioning_lifetime * 365.25 * 24.0 * 3600.0
         return [t_peak, t_seasonal, t_annual]

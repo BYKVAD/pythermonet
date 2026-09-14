@@ -5,6 +5,66 @@ import numpy as np
 
 from pythermonet.components.pipe_infrastructure import PipeInfrastructure
 from pythermonet.core.material import Material
+from pythermonet.core.pipe_segment import PipeSegment
+
+
+@dataclass
+class DistributionNetworkParameters:
+    """Construction parameters for an undimensioned distribution network.
+
+    Parameters
+    ----------
+    roughness : float
+        Pipe wall roughness [m].
+    burial_depth : float
+        Burial depth of the distribution pipes [m].
+    pipe_spacing : float or None
+        Wall-to-wall spacing between parallel pipes [m]. Only meaningful
+        when `n_pipes_parallel` > 1; may be None otherwise.
+    n_pipes_parallel : int
+        Number of parallel pipes per trace [-].
+
+    """
+
+    roughness: float             # m
+    burial_depth: float          # m
+    pipe_spacing: float | None   # m
+    n_pipes_parallel: int
+
+
+@dataclass
+class UndimensionedTopologyInput:
+    """Raw per-trace arrays parsed from an undimensioned topology TSV file.
+
+    Holds only what was read from the file — no pipe material, sizing, or
+    installation parameters have been applied yet. See
+    `pythermonet.input.read_topology.read_undimensioned_topology_tsv`, and
+    `build_distribution_network` for turning this into a `DistributionNetwork`.
+
+    Parameters
+    ----------
+    trace_names : list of str
+        Name of each trace.
+    sdr : numpy.ndarray
+        Standard dimension ratio per trace [-].
+    trace_lengths : numpy.ndarray
+        One-way trace length [m].
+    trace_counts : numpy.ndarray
+        Number of traces per section [-].
+    trace_max_pressure_loss : numpy.ndarray
+        Maximum allowed pressure loss per trace [Pa].
+    heat_pump_ids_trace : list of numpy.ndarray
+        Heat pump IDs served by each trace.
+
+    """
+
+    trace_names: list[str]
+    sdr: np.ndarray
+    trace_lengths: np.ndarray             # m
+    trace_counts: np.ndarray
+    trace_max_pressure_loss: np.ndarray   # Pa
+    heat_pump_ids_trace: list[np.ndarray]
+
 
 @dataclass(frozen=True, slots=True)
 class DistributionNetwork:
@@ -37,3 +97,62 @@ class DistributionNetwork:
                 )
 
         object.__setattr__(self, "material_pipe", first)
+
+
+def build_distribution_network(
+    topology: UndimensionedTopologyInput,
+    *,
+    pipe_material: Material,
+    network_parameters: DistributionNetworkParameters,
+) -> DistributionNetwork:
+    """Assemble a `DistributionNetwork` from parsed topology and construction inputs.
+
+    Does no file I/O — `topology` is expected to already be parsed, e.g. via
+    `pythermonet.input.read_topology.read_undimensioned_topology_tsv`.
+
+    Parameters
+    ----------
+    topology : UndimensionedTopologyInput
+        Raw per-trace arrays parsed from an undimensioned topology file.
+    pipe_material : Material
+        Thermal properties of the distribution pipe wall material.
+    network_parameters : DistributionNetworkParameters
+        Roughness, burial depth, and parallel-pipe layout for the network.
+
+    Returns
+    -------
+    DistributionNetwork
+        Segments have `diameter_outer = nan` — sizing is applied later by
+        pipe dimensioning.
+
+    """
+    trace_segments: list[PipeSegment] = []
+    for i in range(len(topology.trace_names)):
+        # trace length x number of parallel pipes
+        length = topology.trace_lengths[i] * network_parameters.n_pipes_parallel
+        seg = PipeSegment(
+            diameter_outer=np.nan,  # udfyldes efter dimensionering
+            sdr=float(topology.sdr[i]),
+            material=pipe_material,
+            roughness=float(network_parameters.roughness),
+            id_=int(i),
+            length=float(length),
+        )
+        trace_segments.append(seg)
+
+    infrastructure = PipeInfrastructure(
+        n_pipes_parallel=int(network_parameters.n_pipes_parallel),
+        segments_trace=trace_segments,
+        pipe_spacing=network_parameters.pipe_spacing,
+        burial_depth=float(network_parameters.burial_depth),
+    )
+
+    return DistributionNetwork(
+        pipe_infrastructure=infrastructure,
+        names_trace=topology.trace_names,
+        heat_pump_ids_trace=topology.heat_pump_ids_trace,
+        pressure_losses_max_trace=topology.trace_max_pressure_loss,
+        sdr=topology.sdr,
+        lengths_trace=topology.trace_lengths,
+        counts_trace=topology.trace_counts,
+    )

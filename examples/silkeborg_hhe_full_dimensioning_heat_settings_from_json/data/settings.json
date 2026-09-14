@@ -1,0 +1,89 @@
+{
+  "pipe_material_dist": {
+    "type": "material",
+    "values": {
+      "density": 975,
+      "specific_heat": 1900,
+      "thermal_conductivity": 0.4
+    }
+  },
+  "brine": {
+    "type": "heat_carrier",
+    "values": {
+      "density": 965,
+      "specific_heat": 4450,
+      "thermal_conductivity": 0.45,
+      "dynamic_viscosity": 0.005
+    }
+  },
+  "soil": {
+    "type": "soil",
+    "values": {
+      "density": 2500,
+      "specific_heat": 1000,
+      "thermal_conductivity": 1.25,
+      "thermal_conductivity_shallow_heating": 1.25,
+      "thermal_conductivity_shallow_cooling": 1.25,
+      "geothermal_heat_flux": 0.0185,
+      "temperature_surface_mean": 9.03,
+      "temperature_surface_amplitude": 7.9
+    }
+  },
+  "distribution_network_parameters": {
+    "type": "distribution_network_parameters",
+    "values": {
+      "roughness": 1e-06,
+      "burial_depth": 1.2,
+      "pipe_spacing": 0.3,
+      "n_pipes_parallel": 2
+    }
+  },
+  "heat_pump_peak_supply_parameters": {
+    "type": "heat_pump_peak_supply_parameters",
+    "values": {
+      "peak_hours_heating": 4.0,
+      "peak_fraction_heating_mode": "incremental",
+      "peak_fraction_heating": 1.0,
+      "peak_hours_cooling": 4.0,
+      "peak_fraction_cooling_mode": "incremental",
+      "peak_fraction_cooling": 1.0
+    }
+  },
+  "sizing_parameters": {
+    "type": "sizing_parameters",
+    "values": {
+      "thermal_dimensioning_lifetime": 30.0
+    }
+  },
+  "brine_temperature_limits": {
+    "type": "brine_temperature_limits",
+    "values": {
+      "temperature_brine_min_heating": -3.0,
+      "temperature_brine_max_cooling": 20.0
+    }
+  },
+  "pipe_material_hhe": {
+    "type": "material",
+    "values": {
+      "density": 975,
+      "specific_heat": 1900,
+      "thermal_conductivity": 0.4
+    }
+  },
+  "pipe_segment_hhe": {
+    "type": "pipe_segment_parameters",
+    "values": {
+      "diameter_outer": 0.04,
+      "sdr": 17.0,
+      "roughness": 1e-06
+    }
+  },
+  "pipe_infrastructure_hhe": {
+    "type": "pipe_infrastructure_parameters",
+    "values": {
+      "n_pipes_parallel": 20,
+      "pipe_spacing": 1.5,
+      "burial_depth": 1.2
+    }
+  }
+}

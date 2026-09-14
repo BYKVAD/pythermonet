@@ -5,9 +5,115 @@ from typing import Sequence, Any
 
 import numpy as np
 import pygfunction as gt
-from ..core.pipe_segment import PipeSegment
+from pyproj import CRS, Transformer
+
+from ..core.pipe_segment import PipeSegment, PipeSegmentParameters
 from ..core.annulus import Annulus
 from ..core.material import Material
+
+
+@dataclass
+class BorefieldCoordinatesInput:
+    """Raw per-borehole coordinates parsed from a WKT/EWKT geometry source.
+
+    Holds coordinates in their original (source-CRS) frame — no
+    re-referencing to a local origin has been applied yet. See
+    `localize_borefield_coordinates` for turning this into
+    `VHEField.coordinates`.
+
+    Parameters
+    ----------
+    ids : list of str
+        Borehole identifier, one per row.
+    x : numpy.ndarray
+        Easting/X coordinate (or longitude, if `crs` is geographic) in the
+        source CRS.
+    y : numpy.ndarray
+        Northing/Y coordinate (or latitude, if `crs` is geographic) in the
+        source CRS.
+    z : numpy.ndarray or None
+        Z coordinate [m], or None if no row carried one.
+    crs : str
+        SRID shared by every row (e.g. ``"EPSG:25832"``) — required, since
+        there is no way to safely localize coordinates without knowing
+        whether they are projected meters or geographic degrees.
+
+    """
+
+    ids: list[str]
+    x: np.ndarray
+    y: np.ndarray
+    z: np.ndarray | None      # m
+    crs: str
+
+
+def localize_borefield_coordinates(
+    borefield_input: BorefieldCoordinatesInput,
+    origin: tuple[float, float] | None = None,
+) -> list[list[float]]:
+    """Re-reference raw borehole coordinates to a local origin, in meters.
+
+    `VHEField`/`pygfunction` only need relative distances between
+    boreholes, in meters. Two cases:
+
+    - `crs` is already a projected (linear-unit) CRS: a plain subtraction
+      of the origin is exact and cheap — no reprojection needed.
+    - `crs` is geographic (angular-unit, e.g. WGS84 lon/lat): coordinates
+      are reprojected through a local azimuthal-equidistant (AEQD)
+      projection centered at `origin`, which gives correct local meters
+      with negligible distortion at borefield scale (tens-hundreds of m).
+
+    Parameters
+    ----------
+    borefield_input : BorefieldCoordinatesInput
+        Raw per-borehole coordinates, e.g. from
+        `pythermonet.input.read_borefield_coordinates_tsv`.
+    origin : tuple of (float, float) or None
+        Point to center the local frame on, in the same CRS as
+        `borefield_input` (i.e. (x, y) if projected, (lon, lat) if
+        geographic). Defaults to the first borehole's position.
+
+    Returns
+    -------
+    list of list of float
+        Local coordinates in meters, suitable for `VHEField.coordinates` —
+        each row is `[x, y]` or `[x, y, z]`, matching whether
+        `borefield_input.z` is set.
+
+    """
+    crs = CRS.from_user_input(borefield_input.crs)
+    origin_a, origin_b = (
+        origin
+        if origin is not None
+        else (float(borefield_input.x[0]), float(borefield_input.y[0]))
+    )
+
+    if crs.is_geographic:
+        ellipsoid = crs.ellipsoid
+        local_crs = CRS.from_proj4(
+            f"+proj=aeqd +lat_0={origin_b} +lon_0={origin_a} "
+            f"+a={ellipsoid.semi_major_metre} +rf={ellipsoid.inverse_flattening} "
+            "+units=m +no_defs"
+        )
+        transformer = Transformer.from_crs(crs, local_crs, always_xy=True)
+        local_x, local_y = transformer.transform(borefield_input.x, borefield_input.y)
+    else:
+        axis_unit = crs.axis_info[0].unit_name
+        if axis_unit not in ("metre", "meter"):
+            raise ValueError(
+                f"{borefield_input.crs} is a projected CRS with unit "
+                f"'{axis_unit}', not meters — cannot localize."
+            )
+        local_x = borefield_input.x - origin_a
+        local_y = borefield_input.y - origin_b
+
+    if borefield_input.z is None:
+        return [[float(x), float(y)] for x, y in zip(local_x, local_y)]
+
+    return [
+        [float(x), float(y), float(z)]
+        for x, y, z in zip(local_x, local_y, borefield_input.z)
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,3 +288,96 @@ class VHEField:
             boundary_condition=boundary_condition,
             options=options,
         )
+
+
+@dataclass
+class VHEFieldParameters:
+    """Construction parameters for a vertical heat exchanger (BHE) field.
+
+    Excludes `length_borehole` and the u-pipe's `PipeSegment.length` —
+    both are placeholders overwritten by the borehole-length bisection
+    solver (`pythermonet.dimensioning.BHE.borehole_length`) regardless of
+    their starting value, so neither is a genuine input.
+
+    Parameters
+    ----------
+    shank_spacing : float
+        Center-to-center spacing between the U-pipe legs [m].
+    burial_depth : float
+        Burial depth of the borehole top [m].
+    tilt_rad : float
+        Borehole tilt from vertical [rad].
+    orientation_rad : float
+        Borehole tilt azimuth [rad].
+    heat_exchanger_type : str
+        Heat exchanger configuration, e.g. ``"1U"``, ``"2U"``, ``"CX"``.
+
+    """
+
+    shank_spacing: float       # m
+    burial_depth: float        # m
+    tilt_rad: float
+    orientation_rad: float
+    heat_exchanger_type: str
+
+
+def build_vhe_field(
+    segment_parameters: PipeSegmentParameters,
+    field_parameters: VHEFieldParameters,
+    pipe_material: Material,
+    borehole: Annulus,
+    grout: Material,
+    coordinates: Sequence[Sequence[float]],
+) -> VHEField:
+    """Assemble a `VHEField` from flat construction parameters.
+
+    Builds the u-pipe `PipeSegment` internally — `id_` and `length` are
+    fixed placeholders (`length` is overwritten by the borehole-length
+    bisection solver regardless of its value).
+
+    Parameters
+    ----------
+    segment_parameters : PipeSegmentParameters
+        Outer diameter, SDR, and roughness of the U-pipe.
+    field_parameters : VHEFieldParameters
+        Shank spacing, burial depth, tilt, orientation, and heat exchanger
+        type shared by every borehole in the field.
+    pipe_material : Material
+        Thermal properties of the U-pipe wall material.
+    borehole : Annulus
+        Borehole diameter and SDR.
+    grout : Material
+        Thermal properties of the borehole grout.
+    coordinates : sequence of sequence of float
+        (x, y) or (x, y, z) position of each borehole, e.g. from
+        `localize_borefield_coordinates`.
+
+    Returns
+    -------
+    VHEField
+        `length_borehole` holds a placeholder value (`120.0`) — sized later
+        by the BHE bisection solver.
+
+    """
+    pipe = PipeSegment(
+        diameter_outer=segment_parameters.diameter_outer,
+        sdr=segment_parameters.sdr,
+        material=pipe_material,
+        roughness=segment_parameters.roughness,
+        id_=0,
+        length=100.0,  # placeholder — unused by VHEField/BHE sizing
+    )
+
+    return VHEField(
+        id_=1,
+        pipe=pipe,
+        borehole=borehole,
+        grout=grout,
+        coordinates=coordinates,
+        shank_spacing=field_parameters.shank_spacing,
+        length_borehole=120.0,  # placeholder — will be sized
+        burial_depth=field_parameters.burial_depth,
+        tilt_rad=field_parameters.tilt_rad,
+        orientation_rad=field_parameters.orientation_rad,
+        heat_exchanger_type=field_parameters.heat_exchanger_type,
+    )

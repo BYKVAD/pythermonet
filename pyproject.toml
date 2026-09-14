@@ -13,6 +13,8 @@ dependencies = [
   "pandas>=3.0,<4",
   "mpmath>=1.3,<2",
   "pygfunction>=2.2,<3",
+  "shapely>=2.0,<3",
+  "pyproj>=3.6,<4",
 ]
 
 [project.optional-dependencies]

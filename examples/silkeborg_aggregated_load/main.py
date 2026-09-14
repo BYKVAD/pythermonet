@@ -2,17 +2,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pythermonet.core.material import Material
-from pythermonet.core.heat_carrier import HeatCarrier
-from pythermonet.core.soil import Soil
-from pythermonet.components.vhe_field import VHEField
-from pythermonet.core.annulus import Annulus
-from pythermonet.core.pipe_segment import PipeSegment
-from pythermonet.components.ground_loads import ground_loads_from_district
-from pythermonet.input.read_aggregated_load import read_aggregated_load_tsv
-from pythermonet.input.read_dimensioned_topology import read_dimensioned_topology_tsv_to_hydraulic
-from pythermonet.dimensioning.BHE.bhe_workflow import run_bhe_sizing_workflow, print_bhe_results
-from pythermonet.dimensioning.sizing_parameters import SizingParameters
+from pythermonet.components import (
+    AggregatedLoadPeakSupplyParameters,
+    BrineTemperatureLimits,
+    VHEField,
+    ground_loads_from_aggregated_load,
+)
+from pythermonet.core import Annulus, HeatCarrier, Material, PipeSegment, Soil
+from pythermonet.dimensioning import SizingParameters, run_bhe_sizing_workflow
+from pythermonet.input import (
+    read_aggregated_load_tsv,
+    read_dimensioned_topology_tsv_to_hydraulic,
+)
+from pythermonet.output import print_bhe_results
 
 # -----------------------------------------------------------------------------
 # Paths
@@ -94,13 +96,17 @@ BHEfield = VHEField(
 # -----------------------------------------------------------------------------
 agg_load_input = read_aggregated_load_tsv(agg_load_file)
 
-loads = ground_loads_from_district(
-    agg_load_input,
-    brine,
-    f_peak_heating=1.0,
-    f_peak_cooling=1.0,
+peak_supply = AggregatedLoadPeakSupplyParameters(
     peak_hours_heating=4.0,
+    f_peak_heating=1.0,
     peak_hours_cooling=4.0,
+    f_peak_cooling=1.0,
+)
+
+loads = ground_loads_from_aggregated_load(
+    agg_load_input,
+    brine=brine,
+    peak_supply=peak_supply,
 )
 
 sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
@@ -108,8 +114,10 @@ sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
 # -----------------------------------------------------------------------------
 # 5) Brine temperature limits
 # -----------------------------------------------------------------------------
-T_BRINE_MIN_HEAT = -3.0   # HP evaporator inlet limit [°C]
-T_BRINE_MAX_COOL = 25.0   # HP condenser inlet limit [°C]
+brine_temperature_limits = BrineTemperatureLimits(
+    temperature_brine_min_heating=-3.0,
+    temperature_brine_max_cooling=25.0,
+)
 
 # -----------------------------------------------------------------------------
 # 6) BHE sizing workflow + results
@@ -121,7 +129,6 @@ result = run_bhe_sizing_workflow(
     brine=brine,
     soil=soil,
     sizing=sizing,
-    T_brine_min_heat=T_BRINE_MIN_HEAT,
-    T_brine_max_cool=T_BRINE_MAX_COOL,
+    brine_temperature_limits=brine_temperature_limits,
 )
 print_bhe_results(result)

@@ -9,10 +9,14 @@ from pythermonet.core.material import Material
 from pythermonet.core.annulus import Annulus
 from pythermonet.core.heat_carrier import HeatCarrier
 from pythermonet.components.heat_pump import HeatPump
-from pythermonet.components.distribution_network import DistributionNetwork
+from pythermonet.components.distribution_network import (
+    DistributionNetwork,
+    DistributionNetworkParameters,
+    build_distribution_network,
+)
 
 from pythermonet.input.read_pipe_catalog import read_pipe_catalog
-from pythermonet.input.read_topology import read_undimensioned_topology_tsv_to_network
+from pythermonet.input.read_topology import read_undimensioned_topology_tsv
 from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
 
 
@@ -42,13 +46,16 @@ def load_project_inputs(
         dtype=float,
     )
 
-    network = read_undimensioned_topology_tsv_to_network(
-        str(topology_file),
+    topology = read_undimensioned_topology_tsv(str(topology_file))
+    network = build_distribution_network(
+        topology,
         pipe_material=pipe_material,
-        roughness=roughness,
-        burial_depth=burial_depth,
-        pipe_distance=pipe_distance,
-        n_parallel_pipes=n_parallel_pipes,
+        network_parameters=DistributionNetworkParameters(
+            roughness=roughness,
+            burial_depth=burial_depth,
+            pipe_spacing=pipe_distance,
+            n_pipes_parallel=n_parallel_pipes,
+        ),
     )
 
     heat_pumps = read_heat_pumps_tsv(path=str(heat_pump_file))

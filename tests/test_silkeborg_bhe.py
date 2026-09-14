@@ -14,21 +14,28 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from conftest import EXAMPLES_DIR
-from pythermonet.components.ground_loads import ground_loads_from_heat_pumps
-from pythermonet.components.vhe_field import VHEField
-from pythermonet.core.annulus import Annulus
-from pythermonet.core.heat_carrier import HeatCarrier
-from pythermonet.core.material import Material
-from pythermonet.core.pipe_segment import PipeSegment
-from pythermonet.core.soil import Soil
-from pythermonet.dimensioning.BHE.bhe_workflow import run_bhe_sizing_workflow
-from pythermonet.dimensioning.hydraulic_dimensioning import run_pipedimensioning
-from pythermonet.dimensioning.sizing_parameters import SizingParameters
-from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
-from pythermonet.input.read_pipe_catalog import read_pipe_catalog
-from pythermonet.input.read_topology import read_undimensioned_topology_tsv_to_network
+
+from pythermonet.components import (
+    BrineTemperatureLimits,
+    DistributionNetworkParameters,
+    HeatPumpPeakSupplyParameters,
+    VHEFieldParameters,
+    build_distribution_network,
+    build_vhe_field,
+    ground_loads_from_heat_pumps,
+)
+from pythermonet.core import Annulus, HeatCarrier, Material, PipeSegmentParameters, Soil
+from pythermonet.dimensioning import (
+    SizingParameters,
+    run_bhe_sizing_workflow,
+    run_pipedimensioning,
+)
+from pythermonet.input import (
+    read_heat_pumps_tsv,
+    read_pipe_catalog,
+    read_undimensioned_topology_tsv,
+)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -64,13 +71,19 @@ def bhe_dimensioning():
         temperature_surface_amplitude=7.9,
     )
 
-    network = read_undimensioned_topology_tsv_to_network(
+    topology = read_undimensioned_topology_tsv(
         _EXAMPLE_BHE_DIR / "data" / "silkeborg_topology.dat",
-        pipe_material=pipe_material_dist,
+    )
+    network_parameters = DistributionNetworkParameters(
         roughness=1e-6,
         burial_depth=1.2,
-        pipe_distance=0.3,
-        n_parallel_pipes=2,
+        pipe_spacing=0.3,
+        n_pipes_parallel=2,
+    )
+    network = build_distribution_network(
+        topology,
+        pipe_material=pipe_material_dist,
+        network_parameters=network_parameters,
     )
 
     # Borehole field
@@ -81,27 +94,31 @@ def bhe_dimensioning():
         density=1000, specific_heat=2e3, thermal_conductivity=0.4
     )
     borehole = Annulus(diameter_outer=0.152, sdr=1000.0)
-    upipe = PipeSegment(
-        diameter_outer=0.04, sdr=11.0, material=pipe_mat_bhe,
-        roughness=1e-6, id_=0, length=100,
+    pipe_segment_parameters_bhe = PipeSegmentParameters(
+        diameter_outer=0.04, sdr=11.0, roughness=1e-6,
+    )
+    vhe_field_parameters = VHEFieldParameters(
+        shank_spacing=0.015 + 2 * 0.02,
+        burial_depth=1.0,
+        tilt_rad=0.0,
+        orientation_rad=0.0,
+        heat_exchanger_type="1U",
     )
     n_boreholes = 6
     spacing_m = 15.0
-    bhe_field = VHEField(
-        id_=1, heat_exchanger_type="1U",
-        pipe=upipe, borehole=borehole, grout=grout,
+    bhe_field = build_vhe_field(
+        segment_parameters=pipe_segment_parameters_bhe,
+        field_parameters=vhe_field_parameters,
+        pipe_material=pipe_mat_bhe,
+        borehole=borehole,
+        grout=grout,
         coordinates=[[0.0, i * spacing_m] for i in range(n_boreholes)],
-        shank_spacing=0.015 + 2 * 0.02,
-        length_borehole=120.0, burial_depth=1.0,
-        tilt_rad=0.0, orientation_rad=0.0,
     )
 
     hp_list = read_heat_pumps_tsv(
         path=_EXAMPLE_BHE_DIR / "data" / "silkeborg_heat_pump_heat_high_cool.dat"
     )
-    loads = ground_loads_from_heat_pumps(
-        hp_list,
-        brine,
+    peak_supply = HeatPumpPeakSupplyParameters(
         peak_hours_heating=4.0,
         peak_fraction_heating_mode="incremental",
         peak_fraction_heating=1.0,
@@ -109,8 +126,18 @@ def bhe_dimensioning():
         peak_fraction_cooling_mode="incremental",
         peak_fraction_cooling=1.0,
     )
+    loads = ground_loads_from_heat_pumps(
+        hp_list,
+        brine=brine,
+        peak_supply=peak_supply,
+    )
 
     sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
+
+    brine_temperature_limits = BrineTemperatureLimits(
+        temperature_brine_min_heating=-3.0,
+        temperature_brine_max_cooling=20.0,
+    )
 
     hydraulic = run_pipedimensioning(pipe_catalog, brine, network, hp_list)
 
@@ -121,8 +148,7 @@ def bhe_dimensioning():
         brine=brine,
         soil=soil,
         sizing=sizing,
-        T_brine_min_heat=-3.0,
-        T_brine_max_cool=20.0,
+        brine_temperature_limits=brine_temperature_limits,
     )
 
     return hydraulic, result
