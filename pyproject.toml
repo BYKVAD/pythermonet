@@ -27,7 +27,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-pythermonet = ["resources/*.csv"]
+pythermonet = ["resources/*.csv", "resources/*.json"]
 
 [tool.ruff]
 line-length = 88

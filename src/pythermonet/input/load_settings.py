@@ -9,6 +9,7 @@ from pythermonet.settings import (
     class_for_type_name,
     describe_block_problem,
     field_names,
+    validate_field_values,
 )
 
 
@@ -17,8 +18,9 @@ def load_settings(path: str | Path) -> dict[str, object]:
 
     Loading is pure and all-or-nothing: it never mutates the file, and never
     fills in a missing field from a default. Either every block in the file
-    matches its declared type's current schema exactly, or nothing is
-    constructed and a `ValueError` describing every problem block is raised.
+    matches its declared type's current schema exactly — including each
+    field's declared unit — or nothing is constructed and a `ValueError`
+    describing every problem block is raised.
 
     Parameters
     ----------
@@ -36,10 +38,12 @@ def load_settings(path: str | Path) -> dict[str, object]:
     FileNotFoundError
         If `path` does not exist.
     ValueError
-        If any block in the file has an unrecognized `"type"` tag, or fields
+        If any block in the file has an unrecognized `"type"` tag; fields
         that do not match its declared type's current schema (unrecognized
-        and/or missing fields). The message lists every problem block found
-        in the file, not just the first one.
+        and/or missing fields); a field entry that isn't a well-formed
+        `{"value": ..., "unit": ...}` object; or a field whose declared unit
+        doesn't match the type's registered unit for that field. The message
+        lists every problem block found in the file, not just the first one.
 
     """
     p = Path(path)
@@ -69,8 +73,13 @@ def load_settings(path: str | Path) -> dict[str, object]:
 
         if unrecognized or missing:
             problems.append(describe_block_problem(role, cls, unrecognized, missing))
+            continue
+
+        field_problems, unwrapped = validate_field_values(role, cls, values)
+        if field_problems:
+            problems.extend(field_problems)
         else:
-            objects[role] = cls(**values)
+            objects[role] = cls(**unwrapped)
 
     if problems:
         message = f"Problems found in settings file '{p}':\n" + "\n".join(problems)

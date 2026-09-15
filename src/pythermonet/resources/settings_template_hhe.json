@@ -1,0 +1,89 @@
+{
+  "pipe_material_dist": {
+    "type": "material",
+    "values": {
+      "density": {"value": 975, "unit": "kg/m^3"},
+      "specific_heat": {"value": 1900, "unit": "J/kg/K"},
+      "thermal_conductivity": {"value": 0.4, "unit": "W/m/K"}
+    }
+  },
+  "brine": {
+    "type": "heat_carrier",
+    "values": {
+      "density": {"value": 965, "unit": "kg/m^3"},
+      "specific_heat": {"value": 4450, "unit": "J/kg/K"},
+      "thermal_conductivity": {"value": 0.45, "unit": "W/m/K"},
+      "dynamic_viscosity": {"value": 0.005, "unit": "Pa*s"}
+    }
+  },
+  "soil": {
+    "type": "soil",
+    "values": {
+      "density": {"value": 2500, "unit": "kg/m^3"},
+      "specific_heat": {"value": 1000, "unit": "J/kg/K"},
+      "thermal_conductivity": {"value": 1.25, "unit": "W/m/K"},
+      "thermal_conductivity_shallow_heating": {"value": 1.25, "unit": "W/m/K"},
+      "thermal_conductivity_shallow_cooling": {"value": 1.25, "unit": "W/m/K"},
+      "geothermal_heat_flux": {"value": 0.0185, "unit": "W/m^2"},
+      "temperature_surface_mean": {"value": 9.03, "unit": "degC"},
+      "temperature_surface_amplitude": {"value": 7.9, "unit": "K"}
+    }
+  },
+  "distribution_network_parameters": {
+    "type": "distribution_network_parameters",
+    "values": {
+      "roughness": {"value": 1e-06, "unit": "m"},
+      "burial_depth": {"value": 1.2, "unit": "m"},
+      "pipe_spacing": {"value": 0.3, "unit": "m"},
+      "n_pipes_parallel": {"value": 2, "unit": "-"}
+    }
+  },
+  "heat_pump_peak_supply_parameters": {
+    "type": "heat_pump_peak_supply_parameters",
+    "values": {
+      "peak_hours_heating": {"value": 4.0, "unit": "h"},
+      "peak_fraction_heating_mode": {"value": "incremental", "unit": "-"},
+      "peak_fraction_heating": {"value": 1.0, "unit": "-"},
+      "peak_hours_cooling": {"value": 4.0, "unit": "h"},
+      "peak_fraction_cooling_mode": {"value": "incremental", "unit": "-"},
+      "peak_fraction_cooling": {"value": 1.0, "unit": "-"}
+    }
+  },
+  "sizing_parameters": {
+    "type": "sizing_parameters",
+    "values": {
+      "thermal_dimensioning_lifetime": {"value": 30.0, "unit": "years"}
+    }
+  },
+  "brine_temperature_limits": {
+    "type": "brine_temperature_limits",
+    "values": {
+      "temperature_brine_min_heating": {"value": -3.0, "unit": "degC"},
+      "temperature_brine_max_cooling": {"value": 20.0, "unit": "degC"}
+    }
+  },
+  "pipe_material_hhe": {
+    "type": "material",
+    "values": {
+      "density": {"value": 975, "unit": "kg/m^3"},
+      "specific_heat": {"value": 1900, "unit": "J/kg/K"},
+      "thermal_conductivity": {"value": 0.4, "unit": "W/m/K"}
+    }
+  },
+  "pipe_segment_hhe": {
+    "type": "pipe_segment_parameters",
+    "values": {
+      "diameter_outer": {"value": 0.04, "unit": "m"},
+      "sdr": {"value": 17.0, "unit": "-"},
+      "roughness": {"value": 1e-06, "unit": "m"}
+    }
+  },
+  "pipe_infrastructure_hhe": {
+    "type": "pipe_infrastructure_parameters",
+    "values": {
+      "n_pipes_parallel": {"value": 20, "unit": "-"},
+      "pipe_spacing": {"value": 1.5, "unit": "m"},
+      "burial_depth": {"value": 1.2, "unit": "m"}
+    }
+  }
+}

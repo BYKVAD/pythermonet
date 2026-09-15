@@ -18,6 +18,7 @@ from pythermonet.input import (
     read_undimensioned_topology_tsv,
 )
 from pythermonet.output import print_hhe_results
+from pythermonet.resources import SETTINGS_TEMPLATE_HHE_PATH
 
 # -----------------------------------------------------------------------------
 # Paths
@@ -26,7 +27,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 
 heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat_only.dat"
 topology_file = PROJECT_DIR / "data/silkeborg_topology.dat"
-settings_file = PROJECT_DIR / "data/settings.json"
+settings_file = SETTINGS_TEMPLATE_HHE_PATH
 
 
 # -----------------------------------------------------------------------------

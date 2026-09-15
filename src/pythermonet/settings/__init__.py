@@ -22,7 +22,12 @@ from pythermonet.settings.registry import (
     class_for_type_name,
     type_name_for,
 )
-from pythermonet.settings.validation import describe_block_problem, field_names
+from pythermonet.settings.units import UNITS_BY_TYPE
+from pythermonet.settings.validation import (
+    describe_block_problem,
+    field_names,
+    validate_field_values,
+)
 
 __all__ = [
     "ANNULUS_PRESETS",
@@ -38,9 +43,11 @@ __all__ = [
     "PRESETS_SOURCE_NOTE",
     "SIZING_PARAMETERS_PRESETS",
     "SOIL_PRESETS",
+    "UNITS_BY_TYPE",
     "VHE_FIELD_PARAMETERS_PRESETS",
     "class_for_type_name",
     "describe_block_problem",
     "field_names",
     "type_name_for",
+    "validate_field_values",
 ]

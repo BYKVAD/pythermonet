@@ -20,6 +20,7 @@ from pythermonet.input import (
     read_undimensioned_topology_tsv,
 )
 from pythermonet.output import print_bhe_results
+from pythermonet.resources import SETTINGS_TEMPLATE_BHE_PATH
 
 # -----------------------------------------------------------------------------
 # Paths
@@ -28,7 +29,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 
 heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat_cool.dat"
 topology_file = PROJECT_DIR / "data/silkeborg_topology.dat"
-settings_file = PROJECT_DIR / "data/settings.json"
+settings_file = SETTINGS_TEMPLATE_BHE_PATH
 borefield_coordinates_file = PROJECT_DIR / "data/silkeborg_borefield_coordinates.dat"
 
 
