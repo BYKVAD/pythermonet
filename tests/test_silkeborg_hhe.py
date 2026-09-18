@@ -20,9 +20,9 @@ from pythermonet.components import (
     BrineTemperatureLimits,
     DistributionNetworkParameters,
     HeatPumpPeakSupplyParameters,
-    PipeInfrastructureParameters,
+    HHEFieldParameters,
     build_distribution_network,
-    build_pipe_infrastructure,
+    build_hhe_field,
     ground_loads_from_heat_pumps,
 )
 from pythermonet.core import HeatCarrier, Material, PipeSegmentParameters, Soil
@@ -90,14 +90,15 @@ def hhe_dimensioning():
     pipe_segment_parameters_hhe = PipeSegmentParameters(
         diameter_outer=0.040, sdr=17.0, roughness=1e-6,
     )
-    pipe_infrastructure_parameters_hhe = PipeInfrastructureParameters(
+    hhe_field_parameters = HHEFieldParameters(
         n_pipes_parallel=20,
         pipe_spacing=1.5,
         burial_depth=1.2,
+        length_element=100.0,
     )
-    pipe_infrastructure_hhe = build_pipe_infrastructure(
+    pipe_infrastructure_hhe = build_hhe_field(
         segment_parameters=pipe_segment_parameters_hhe,
-        infrastructure_parameters=pipe_infrastructure_parameters_hhe,
+        field_parameters=hhe_field_parameters,
         pipe_material=pipe_material_dist,
     )
     ground_field_hhe = HHEGroundField(

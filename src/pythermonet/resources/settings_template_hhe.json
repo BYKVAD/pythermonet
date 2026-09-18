@@ -79,11 +79,12 @@
     }
   },
   "pipe_infrastructure_hhe": {
-    "type": "pipe_infrastructure_parameters",
+    "type": "h_h_e_field_parameters",
     "values": {
       "n_pipes_parallel": {"value": 20, "unit": "-"},
       "pipe_spacing": {"value": 1.5, "unit": "m"},
-      "burial_depth": {"value": 1.2, "unit": "m"}
+      "burial_depth": {"value": 1.2, "unit": "m"},
+      "length_element": {"value": 100.0, "unit": "m"}
     }
   }
 }

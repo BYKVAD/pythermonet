@@ -13,7 +13,7 @@ from __future__ import annotations
 from pythermonet.components.distribution_network import DistributionNetworkParameters
 from pythermonet.components.ground_loads import HeatPumpPeakSupplyParameters
 from pythermonet.components.heat_pump import BrineTemperatureLimits
-from pythermonet.components.pipe_infrastructure import PipeInfrastructureParameters
+from pythermonet.components.pipe_infrastructure import HHEFieldParameters
 from pythermonet.components.vhe_field import VHEFieldParameters
 from pythermonet.core.annulus import Annulus
 from pythermonet.core.heat_carrier import HeatCarrier
@@ -70,10 +70,11 @@ UNITS_BY_TYPE: dict[type, dict[str, str]] = {
         "sdr": "-",
         "roughness": "m",
     },
-    PipeInfrastructureParameters: {
+    HHEFieldParameters: {
         "n_pipes_parallel": "-",
         "pipe_spacing": "m",
         "burial_depth": "m",
+        "length_element": "m",
     },
     Annulus: {
         "diameter_outer": "m",

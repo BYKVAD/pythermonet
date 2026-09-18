@@ -11,7 +11,7 @@ from __future__ import annotations
 from pythermonet.components.distribution_network import DistributionNetworkParameters
 from pythermonet.components.ground_loads import HeatPumpPeakSupplyParameters
 from pythermonet.components.heat_pump import BrineTemperatureLimits
-from pythermonet.components.pipe_infrastructure import PipeInfrastructureParameters
+from pythermonet.components.pipe_infrastructure import HHEFieldParameters
 from pythermonet.components.vhe_field import VHEFieldParameters
 from pythermonet.core.annulus import Annulus
 from pythermonet.core.heat_carrier import HeatCarrier
@@ -115,11 +115,12 @@ PIPE_SEGMENT_PARAMETERS_PRESETS: dict[str, PipeSegmentParameters] = {
     ),
 }
 
-PIPE_INFRASTRUCTURE_PARAMETERS_PRESETS: dict[str, PipeInfrastructureParameters] = {
-    "pipe_infrastructure_hhe": PipeInfrastructureParameters(
+HHE_FIELD_PARAMETERS_PRESETS: dict[str, HHEFieldParameters] = {
+    "pipe_infrastructure_hhe": HHEFieldParameters(
         n_pipes_parallel=20,
         pipe_spacing=1.5,
         burial_depth=1.2,
+        length_element=100.0,
     ),
 }
 
@@ -146,7 +147,7 @@ PRESETS_BY_TYPE: dict[type, dict[str, object]] = {
     SizingParameters: SIZING_PARAMETERS_PRESETS,
     BrineTemperatureLimits: BRINE_TEMPERATURE_LIMITS_PRESETS,
     PipeSegmentParameters: PIPE_SEGMENT_PARAMETERS_PRESETS,
-    PipeInfrastructureParameters: PIPE_INFRASTRUCTURE_PARAMETERS_PRESETS,
+    HHEFieldParameters: HHE_FIELD_PARAMETERS_PRESETS,
     Annulus: ANNULUS_PRESETS,
     VHEFieldParameters: VHE_FIELD_PARAMETERS_PRESETS,
 }

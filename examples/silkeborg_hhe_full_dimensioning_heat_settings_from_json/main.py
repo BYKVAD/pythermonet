@@ -7,7 +7,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 from pythermonet.components import (
     build_distribution_network,
-    build_pipe_infrastructure,
+    build_hhe_field,
     ground_loads_from_heat_pumps,
 )
 from pythermonet.dimensioning import HHEGroundField, run_hhe_sizing_workflow, run_pipedimensioning
@@ -60,11 +60,11 @@ distribution_network_undimensioned = build_distribution_network(
 # -----------------------------------------------------------------------------
 pipe_material_hhe = settings["pipe_material_hhe"]
 pipe_segment_parameters_hhe = settings["pipe_segment_hhe"]
-pipe_infrastructure_parameters_hhe = settings["pipe_infrastructure_hhe"]
+hhe_field_parameters = settings["pipe_infrastructure_hhe"]
 
-pipe_infrastructure_hhe = build_pipe_infrastructure(
+pipe_infrastructure_hhe = build_hhe_field(
     segment_parameters=pipe_segment_parameters_hhe,
-    infrastructure_parameters=pipe_infrastructure_parameters_hhe,
+    field_parameters=hhe_field_parameters,
     pipe_material=pipe_material_hhe,
 )
 

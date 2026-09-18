@@ -16,8 +16,14 @@ class PipeInfrastructure:
 
 
 @dataclass
-class PipeInfrastructureParameters:
-    """Construction parameters for a single-segment-trace pipe infrastructure.
+class HHEFieldParameters:
+    """Construction parameters for a single-segment-trace HHE field.
+
+    `length_element` is a placeholder, not a genuine input — it is always
+    overwritten by the HHE bisection solver (`pythermonet.dimensioning`)
+    regardless of its starting value. It exists here only so a settings
+    file can carry a length for a site-placement viewer to render before
+    (re)dimensioning has run.
 
     Parameters
     ----------
@@ -27,17 +33,20 @@ class PipeInfrastructureParameters:
         Wall-to-wall spacing between parallel pipes [m].
     burial_depth : float
         Burial depth of the pipes [m].
+    length_element : float
+        Length of the single pipe segment representing the field [m].
 
     """
 
     n_pipes_parallel: int
     pipe_spacing: float | None  # m
     burial_depth: float         # m
+    length_element: float       # m
 
 
-def build_pipe_infrastructure(
+def build_hhe_field(
     segment_parameters: PipeSegmentParameters,
-    infrastructure_parameters: PipeInfrastructureParameters,
+    field_parameters: HHEFieldParameters,
     pipe_material: Material,
 ) -> PipeInfrastructure:
     """Assemble a single-segment-trace `PipeInfrastructure`.
@@ -50,16 +59,17 @@ def build_pipe_infrastructure(
     ----------
     segment_parameters : PipeSegmentParameters
         Outer diameter, SDR, and roughness of the pipe segment.
-    infrastructure_parameters : PipeInfrastructureParameters
-        Parallel-pipe count, spacing, and burial depth.
+    field_parameters : HHEFieldParameters
+        Parallel-pipe count, spacing, burial depth, and starting length.
     pipe_material : Material
         Thermal properties of the pipe wall material.
 
     Returns
     -------
     PipeInfrastructure
-        `segments_trace` holds a single placeholder-length `PipeSegment`
-        (`length=100.0`) — sized later by the HHE bisection solver.
+        `segments_trace` holds a single `PipeSegment` at
+        `field_parameters.length_element` — sized later by the HHE
+        bisection solver, which does not mutate this object in place.
 
     """
     segment = PipeSegment(
@@ -68,12 +78,12 @@ def build_pipe_infrastructure(
         material=pipe_material,
         roughness=segment_parameters.roughness,
         id_=0,
-        length=100.0,  # placeholder — will be sized
+        length=field_parameters.length_element,
     )
 
     return PipeInfrastructure(
-        n_pipes_parallel=infrastructure_parameters.n_pipes_parallel,
+        n_pipes_parallel=field_parameters.n_pipes_parallel,
         segments_trace=[segment],
-        pipe_spacing=infrastructure_parameters.pipe_spacing,
-        burial_depth=infrastructure_parameters.burial_depth,
+        pipe_spacing=field_parameters.pipe_spacing,
+        burial_depth=field_parameters.burial_depth,
     )

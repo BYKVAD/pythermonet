@@ -14,9 +14,9 @@ from pythermonet.components.ground_loads import (
 )
 from pythermonet.components.heat_pump import BrineTemperatureLimits, HeatPump
 from pythermonet.components.pipe_infrastructure import (
+    HHEFieldParameters,
     PipeInfrastructure,
-    PipeInfrastructureParameters,
-    build_pipe_infrastructure,
+    build_hhe_field,
 )
 from pythermonet.components.vhe_field import (
     BorefieldCoordinatesInput,
@@ -31,14 +31,14 @@ __all__ = [
     "BorefieldCoordinatesInput",
     "BrineTemperatureLimits",
     "DistributionNetworkParameters",
+    "HHEFieldParameters",
     "HeatPump",
     "HeatPumpPeakSupplyParameters",
     "PipeInfrastructure",
-    "PipeInfrastructureParameters",
     "VHEField",
     "VHEFieldParameters",
     "build_distribution_network",
-    "build_pipe_infrastructure",
+    "build_hhe_field",
     "build_vhe_field",
     "ground_loads_from_aggregated_load",
     "ground_loads_from_heat_pumps",
