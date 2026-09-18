@@ -12,6 +12,8 @@ from pythermonet.settings import (
     validate_field_values,
 )
 
+_RESERVED_KEY_PREFIX = "qthermonet_"
+
 
 def load_settings(path: str | Path) -> dict[str, object]:
     """Load and validate a project settings file into pythermonet domain objects.
@@ -21,6 +23,12 @@ def load_settings(path: str | Path) -> dict[str, object]:
     matches its declared type's current schema exactly — including each
     field's declared unit — or nothing is constructed and a `ValueError`
     describing every problem block is raised.
+
+    Top-level keys whose name starts with ``"qthermonet_"`` (case-insensitive)
+    are reserved for external consumers (currently QThermonet) to stash their
+    own arbitrary JSON alongside pythermonet's own blocks. Such keys are
+    skipped entirely — never type-checked, validated, or included in the
+    returned mapping.
 
     Parameters
     ----------
@@ -57,6 +65,8 @@ def load_settings(path: str | Path) -> dict[str, object]:
     objects: dict[str, object] = {}
 
     for role, block in raw.items():
+        if role.lower().startswith(_RESERVED_KEY_PREFIX):
+            continue
         type_name = block["type"]
         values = dict(block["values"])
 

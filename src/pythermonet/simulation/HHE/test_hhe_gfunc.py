@@ -315,8 +315,8 @@ def test_spatial_cutoff():
 
     # Close pipe: should be larger than g1 at longer times
     t_long = np.array([3600.0 * 24 * 30])
-    g1_l  = hhe.gfunction(make_field(1),          soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, time=t_long)
-    g2_l  = hhe.gfunction(make_field(2, spacing=1.0), soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, time=t_long)
+    g1_l  = hhe.gfunction(make_field(1),          soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=t_long)
+    g2_l  = hhe.gfunction(make_field(2, spacing=1.0), soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=t_long)
     assert g2_l[0] > g1_l[0], "Nearby pipe should increase g at longer times"
 
     print(f"  [PASS] Spatial cutoff: distant pipe negligible at early times OK")
