@@ -78,7 +78,7 @@
       "roughness": {"value": 1e-06, "unit": "m"}
     }
   },
-  "pipe_infrastructure_hhe": {
+  "hhe_field_parameters": {
     "type": "h_h_e_field_parameters",
     "values": {
       "n_pipes_parallel": {"value": 20, "unit": "-"},
