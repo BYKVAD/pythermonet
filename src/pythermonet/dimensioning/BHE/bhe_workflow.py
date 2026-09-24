@@ -49,6 +49,8 @@ class BHEWorkflowResult:
     brine: HeatCarrier
     pressure_loss_bhe_heating: float                    # [Pa]
     pressure_loss_bhe_cooling: float | None             # [Pa]
+    mass_flow_rate_peak_bhe_heating: float               # [kg/s], per borehole
+    mass_flow_rate_peak_bhe_cooling: float | None        # [kg/s], per borehole
 
 
 def run_bhe_sizing_workflow(
@@ -107,6 +109,16 @@ def run_bhe_sizing_workflow(
 
     n_boreholes = vhe_field.n_boreholes
 
+    # Peak mass flow rate per borehole -- named here (rather than inlined into
+    # the call below) so it can also be exposed on BHEWorkflowResult, e.g. for
+    # a Modelica export that needs it directly instead of re-deriving it from
+    # ground_loads + n_boreholes itself.
+    mass_flow_rate_peak_bhe_heating = ground_loads.mass_flow_peak_summed_heating / n_boreholes
+    mass_flow_rate_peak_bhe_cooling = (
+        ground_loads.mass_flow_peak_summed_cooling / n_boreholes
+        if ground_loads.has_cooling else None
+    )
+
     # Size borehole length
     field_sizing = size_borehole_length_heating_cooling(
         T_fluid_min=temperature_brine_min_heating - 0.5 * ground_loads.temperature_delta_brine_flow_weighted_heating,
@@ -120,11 +132,8 @@ def run_bhe_sizing_workflow(
         vhe_field=vhe_field,
         brine=brine,
         soil=soil,
-        m_dot_per_borehole_heat_kg_s=ground_loads.mass_flow_peak_summed_heating / n_boreholes,
-        m_dot_per_borehole_cool_kg_s=(
-            ground_loads.mass_flow_peak_summed_cooling / n_boreholes
-            if ground_loads.has_cooling else None
-        ),
+        m_dot_per_borehole_heat_kg_s=mass_flow_rate_peak_bhe_heating,
+        m_dot_per_borehole_cool_kg_s=mass_flow_rate_peak_bhe_cooling,
         pre_balanced=True,
     )
 
@@ -172,4 +181,6 @@ def run_bhe_sizing_workflow(
         brine=brine,
         pressure_loss_bhe_heating=pressure_loss_bhe_heating,
         pressure_loss_bhe_cooling=pressure_loss_bhe_cooling,
+        mass_flow_rate_peak_bhe_heating=mass_flow_rate_peak_bhe_heating,
+        mass_flow_rate_peak_bhe_cooling=mass_flow_rate_peak_bhe_cooling,
     )

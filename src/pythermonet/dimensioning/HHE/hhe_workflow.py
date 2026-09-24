@@ -50,6 +50,8 @@ class HHEWorkflowResult:
     brine: HeatCarrier
     pressure_loss_hhe_heating: float                   # [Pa]
     pressure_loss_hhe_cooling: float | None            # [Pa]
+    mass_flow_rate_peak_hhe_heating: float              # [kg/s], per loop
+    mass_flow_rate_peak_hhe_cooling: float | None       # [kg/s], per loop
 
 
 def _hhe_mean_temperatures(
@@ -160,6 +162,15 @@ def run_hhe_sizing_workflow(
     n_pipes = pipe_infrastructure.n_pipes_parallel
     n_loops = n_pipes // 2  # each loop = one outgoing + one return pipe
 
+    # Peak mass flow rate per loop -- named here (rather than inlined into
+    # the call below) so it can also be exposed on HHEWorkflowResult, and
+    # reused instead of recomputed by the temperature calcs further down.
+    mass_flow_rate_peak_hhe_heating = ground_loads.mass_flow_peak_summed_heating / n_loops
+    mass_flow_rate_peak_hhe_cooling = (
+        ground_loads.mass_flow_peak_summed_cooling / n_loops
+        if ground_loads.has_cooling else None
+    )
+
     # Size pipe length
     sizing = size_ground_field_length_heating_cooling(
         T_fluid_min=temperature_brine_min_heating - 0.5 * ground_loads.temperature_delta_brine_flow_weighted_heating,
@@ -171,21 +182,17 @@ def run_hhe_sizing_workflow(
         field=hhe_field,
         brine=brine,
         soil=soil,
-        m_dot_per_element_heat=ground_loads.mass_flow_peak_summed_heating / n_loops,
-        m_dot_per_element_cool=(
-            ground_loads.mass_flow_peak_summed_cooling / n_loops
-            if ground_loads.has_cooling else None
-        ),
+        m_dot_per_element_heat=mass_flow_rate_peak_hhe_heating,
+        m_dot_per_element_cool=mass_flow_rate_peak_hhe_cooling,
         pre_balanced=True,  # no annual balance for HHE (HFLS already models surface reset)
     )
 
     L = sizing.length_element
     alpha_heat = hhe_field.k_s_eff_heating(soil) / (float(soil.density) * float(soil.specific_heat))
-    m_dot_heat = ground_loads.mass_flow_peak_summed_heating / n_loops
 
     # HHE temperatures at each pulse (heating)
     g_heat = hhe_field.compute_gfunction(L, np.asarray(times_heat_s, dtype=float), alpha_heat)
-    R_heat = hhe_field.R_at_L(L, m_dot_heat, brine, soil)
+    R_heat = hhe_field.R_at_L(L, mass_flow_rate_peak_hhe_heating, brine, soil)
     T_h_ann, T_h_win, T_h_peak = _hhe_mean_temperatures(
         L, P_heating, g_heat, hhe_field, soil, R_heat, sign=-1.0
     )
@@ -194,9 +201,8 @@ def run_hhe_sizing_workflow(
     T_c_ann = T_c_win = T_c_peak = None
     if ground_loads.has_cooling:
         alpha_cool = hhe_field.k_s_eff_cooling(soil) / (float(soil.density) * float(soil.specific_heat))
-        m_dot_cool = ground_loads.mass_flow_peak_summed_cooling / n_loops
         g_cool = hhe_field.compute_gfunction(L, np.asarray(times_cool_s, dtype=float), alpha_cool)
-        R_cool = hhe_field.R_at_L(L, m_dot_cool, brine, soil)
+        R_cool = hhe_field.R_at_L(L, mass_flow_rate_peak_hhe_cooling, brine, soil)
         T_c_ann, T_c_win, T_c_peak = _hhe_mean_temperatures(
             L, P_cooling, g_cool, hhe_field, soil, R_cool, sign=+1.0
         )
@@ -263,4 +269,6 @@ def run_hhe_sizing_workflow(
         brine=brine,
         pressure_loss_hhe_heating=pressure_loss_hhe_heating,
         pressure_loss_hhe_cooling=pressure_loss_hhe_cooling,
+        mass_flow_rate_peak_hhe_heating=mass_flow_rate_peak_hhe_heating,
+        mass_flow_rate_peak_hhe_cooling=mass_flow_rate_peak_hhe_cooling,
     )
