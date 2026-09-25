@@ -11,6 +11,22 @@ from pythermonet.dimensioning.hydraulic_result import HydraulicResult
 logger = get_logger(__name__)
 
 
+def _validate_heat_pump_ids_known(network, hp_by_id) -> None:
+    """Reject traces referencing heat pump IDs absent from the heat pump list."""
+    problems = []
+    for name, ids in zip(network.names_trace, network.heat_pump_ids_trace):
+        unknown = sorted({int(hpid) for hpid in ids} - set(hp_by_id))
+        if unknown:
+            problems.append(f"'{name}' references {unknown}")
+
+    if problems:
+        raise ValueError(
+            "Topology references heat pump IDs that are not in the heat pump "
+            "input: " + "; ".join(problems) + ". Check that the topology and "
+            "heat pump files belong to the same project."
+        )
+
+
 def run_pipedimensioning(
     pipe_catalog,   # Iterable of pipe catalog entries (outer_diameter, sdr, ...)
     brine,            # HeatCarrier (density, specific_heat, dynamic_viscosity)
@@ -25,13 +41,14 @@ def run_pipedimensioning(
     Netværksobjektet muteres ikke.
     """
 
+    hp_by_id = {hp.id_: hp for hp in heat_pumps}
+    _validate_heat_pump_ids_known(network, hp_by_id)
+
     # Sortér unikke outer diameters fra kataloget
     pipe_catalog_sorted = np.asarray(
         sorted({a.diameter_outer for a in pipe_catalog}),
         dtype=float,
     )
-
-    hp_by_id = {hp.id_: hp for hp in heat_pumps}
     N_trace = len(network.heat_pump_ids_trace)
 
     doCooling = any(

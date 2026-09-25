@@ -99,6 +99,35 @@ class DistributionNetwork:
         object.__setattr__(self, "material_pipe", first)
 
 
+def _validate_heat_pumps_per_trace(topology: UndimensionedTopologyInput) -> None:
+    """Reject traces serving fewer heat pumps than parallel traces.
+
+    Mirrors how pipe dimensioning computes heat pumps per trace
+    (`len(ids) / count`); anything below 1 has no valid diversity factor.
+    """
+    problems = []
+    for name, ids, count in zip(
+        topology.trace_names, topology.heat_pump_ids_trace, topology.trace_counts
+    ):
+        n_heat_pumps = len(ids)
+        if n_heat_pumps == 0:
+            problems.append(f"'{name}' has no heat pumps connected")
+        elif count > 0 and n_heat_pumps < count:
+            problems.append(
+                f"'{name}' has {n_heat_pumps} heat pump(s) spread over "
+                f"{int(count)} parallel traces (fewer than 1 per trace)"
+            )
+
+    if problems:
+        raise ValueError(
+            "Topology contains traces that cannot be dimensioned, since each "
+            "trace must serve at least one heat pump: "
+            + "; ".join(problems)
+            + ". Remove these traces from the topology or connect heat pumps "
+            "to them."
+        )
+
+
 def build_distribution_network(
     topology: UndimensionedTopologyInput,
     *,
@@ -125,7 +154,16 @@ def build_distribution_network(
         Segments have `diameter_outer = nan` — sizing is applied later by
         pipe dimensioning.
 
+    Raises
+    ------
+    ValueError
+        If any trace serves no heat pumps, or fewer heat pumps than its
+        number of parallel traces — such a trace carries less than one heat
+        pump's flow and cannot be dimensioned.
+
     """
+    _validate_heat_pumps_per_trace(topology)
+
     trace_segments: list[PipeSegment] = []
     for i in range(len(topology.trace_names)):
         # trace length x number of parallel pipes
