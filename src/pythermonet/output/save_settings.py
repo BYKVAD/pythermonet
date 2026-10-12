@@ -15,8 +15,9 @@ def save_settings(path: str | Path, objects: dict[str, object]) -> None:
     Always writes a complete snapshot of every role in `objects` — never a
     partial patch against whatever is already on disk. Called explicitly by
     the caller; never triggered automatically as a side effect of loading.
-    Each field is written as a `{"value": ..., "unit": ...}` object, so the
-    file stays self-describing for consumers that can't `import pythermonet`.
+    Each field is written as a `{"value": ..., "unit": ...}` object on a
+    single line, so the file stays self-describing for consumers that can't
+    `import pythermonet` and easy to read by eye.
 
     Parameters
     ----------
@@ -56,5 +57,22 @@ def save_settings(path: str | Path, objects: dict[str, object]) -> None:
             },
         }
 
-    content = json.dumps(raw, indent=2) + "\n"
-    Path(path).write_bytes(content.encode("utf-8"))
+    Path(path).write_bytes(_format_settings_json(raw).encode("utf-8"))
+
+
+def _format_settings_json(raw: dict[str, dict]) -> str:
+    """Indented JSON with each field's value and unit kept on one line."""
+    role_blocks = []
+    for role, block in raw.items():
+        field_lines = [
+            f"      {json.dumps(name)}: {json.dumps(field)}"
+            for name, field in block["values"].items()
+        ]
+        role_blocks.append(
+            f"  {json.dumps(role)}: {{\n"
+            f'    "type": {json.dumps(block["type"])},\n'
+            '    "values": {\n'
+            + ",\n".join(field_lines)
+            + "\n    }\n  }"
+        )
+    return "{\n" + ",\n".join(role_blocks) + "\n}\n"
