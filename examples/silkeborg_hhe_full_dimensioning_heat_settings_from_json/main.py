@@ -17,7 +17,7 @@ from pythermonet.input import (
     read_pipe_catalog,
     read_undimensioned_topology_tsv,
 )
-from pythermonet.output import print_hhe_results
+from pythermonet.output import print_hhe_results, save_hhe_results_txt
 from pythermonet.resources import SETTINGS_TEMPLATE_HHE_PATH
 
 # -----------------------------------------------------------------------------
@@ -118,3 +118,7 @@ result = run_hhe_sizing_workflow(
     brine_temperature_limits=brine_temperature_limits,
 )
 print_hhe_results(result)
+
+out_dir = PROJECT_DIR / "out"
+out_dir.mkdir(exist_ok=True)
+save_hhe_results_txt(result, out_dir / "results.txt")

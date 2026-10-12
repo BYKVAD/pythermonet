@@ -71,7 +71,7 @@ def print_hhe_results(result: HHEWorkflowResult) -> None:
     print('\n' + format_hhe_results(result), end='')
 
 
-def write_hhe_results_txt(result: HHEWorkflowResult, path: str | os.PathLike) -> None:
+def save_hhe_results_txt(result: HHEWorkflowResult, path: str | os.PathLike) -> None:
     """
     Write the HHE results report to a UTF-8 text file with LF line endings.
 

@@ -73,7 +73,7 @@ def print_bhe_results(result: BHEWorkflowResult) -> None:
     print('\n' + format_bhe_results(result), end='')
 
 
-def write_bhe_results_txt(result: BHEWorkflowResult, path: str | os.PathLike) -> None:
+def save_bhe_results_txt(result: BHEWorkflowResult, path: str | os.PathLike) -> None:
     """
     Write the BHE results report to a UTF-8 text file with LF line endings.
 

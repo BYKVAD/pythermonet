@@ -41,7 +41,7 @@ from pythermonet.input import (
 from pythermonet.output import (
     format_bhe_results,
     print_bhe_results,
-    write_bhe_results_txt,
+    save_bhe_results_txt,
 )
 
 # ---------------------------------------------------------------------------
@@ -302,18 +302,18 @@ class TestResultsReport:
         print_bhe_results(fixed_result)
         assert capsys.readouterr().out == "\n" + format_bhe_results(fixed_result)
 
-    def test_write_txt_is_utf8_lf(self, fixed_result, tmp_path):
+    def test_save_txt_is_utf8_lf(self, fixed_result, tmp_path):
         path = tmp_path / "results.txt"
-        write_bhe_results_txt(fixed_result, path)
+        save_bhe_results_txt(fixed_result, path)
         assert path.read_bytes() == format_bhe_results(fixed_result).encode("utf-8")
         assert b"\r\n" not in path.read_bytes()
 
-    def test_write_txt_overwrites_existing_file(self, fixed_result, tmp_path):
+    def test_save_txt_overwrites_existing_file(self, fixed_result, tmp_path):
         path = tmp_path / "results.txt"
         path.write_bytes(b"old content")
-        write_bhe_results_txt(fixed_result, path)
+        save_bhe_results_txt(fixed_result, path)
         assert path.read_bytes() == format_bhe_results(fixed_result).encode("utf-8")
 
-    def test_write_txt_missing_folder_raises(self, fixed_result, tmp_path):
+    def test_save_txt_missing_folder_raises(self, fixed_result, tmp_path):
         with pytest.raises(FileNotFoundError):
-            write_bhe_results_txt(fixed_result, tmp_path / "missing" / "results.txt")
+            save_bhe_results_txt(fixed_result, tmp_path / "missing" / "results.txt")
