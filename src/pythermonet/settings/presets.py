@@ -116,7 +116,7 @@ PIPE_SEGMENT_PARAMETERS_PRESETS: dict[str, PipeSegmentParameters] = {
 }
 
 HHE_FIELD_PARAMETERS_PRESETS: dict[str, HHEFieldParameters] = {
-    "pipe_infrastructure_hhe": HHEFieldParameters(
+    "hhe_field_parameters": HHEFieldParameters(
         n_pipes_parallel=20,
         pipe_spacing=1.5,
         burial_depth=1.2,

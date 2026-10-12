@@ -60,7 +60,7 @@ distribution_network_undimensioned = build_distribution_network(
 # -----------------------------------------------------------------------------
 pipe_material_hhe = settings["pipe_material_hhe"]
 pipe_segment_parameters_hhe = settings["pipe_segment_hhe"]
-hhe_field_parameters = settings["pipe_infrastructure_hhe"]
+hhe_field_parameters = settings["hhe_field_parameters"]
 
 pipe_infrastructure_hhe = build_hhe_field(
     segment_parameters=pipe_segment_parameters_hhe,
@@ -117,4 +117,4 @@ result = run_hhe_sizing_workflow(
     sizing=sizing,
     brine_temperature_limits=brine_temperature_limits,
 )
-print_hhe_results(result, pipe_infrastructure_hhe)
+print_hhe_results(result)
