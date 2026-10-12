@@ -4,6 +4,7 @@ conftest.py — shared pytest configuration and path setup.
 from __future__ import annotations
 
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Ensure the local src/ is on the path so imports work without an editable install.
@@ -15,3 +16,9 @@ if _SRC not in sys.path:
 from pythermonet.resources import PIPE_CATALOG_PATH as PIPE_CATALOG  # noqa: E402
 
 EXAMPLES_DIR = _REPO_ROOT / "examples"
+TESTS_DATA_DIR = _REPO_ROOT / "tests" / "data"
+
+# Fixed header values so formatted reports compare deterministically against
+# tests/data/report_*_expected.txt.
+REPORT_TIMESTAMP = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone(timedelta(hours=1)))
+REPORT_VERSION = "0.0.0-test"

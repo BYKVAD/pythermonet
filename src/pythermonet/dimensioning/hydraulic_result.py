@@ -25,9 +25,17 @@ class HydraulicResult:
     volume_flow_rates_peak_heating: np.ndarray
     volume_flow_rates_peak_cooling: np.ndarray | None
 
+    # Mean brine velocities for installed network (per trace) [m/s]
+    velocities_heating: np.ndarray
+    velocities_cooling: np.ndarray | None
+
     # Reynolds numbers for installed network (per trace)
     reynolds_numbers_heating: np.ndarray
     reynolds_numbers_cooling: np.ndarray | None
+
+    # Pressure loss per pipe length for installed network (per trace) [Pa/m]
+    pressure_losses_per_length_heating: np.ndarray
+    pressure_losses_per_length_cooling: np.ndarray | None
 
     # Total pressure loss for installed network (per trace) [Pa]
     pressure_losses_heating: np.ndarray

@@ -165,4 +165,4 @@ result = run_hhe_sizing_workflow(
     sizing=sizing,
     brine_temperature_limits=brine_temperature_limits,
 )
-print_hhe_results(result, pipe_infrastructure_hhe)
+print_hhe_results(result)

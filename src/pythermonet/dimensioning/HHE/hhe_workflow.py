@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import datetime
 
 import numpy as np
 
@@ -50,8 +51,16 @@ class HHEWorkflowResult:
     brine: HeatCarrier
     pressure_loss_hhe_heating: float                   # [Pa]
     pressure_loss_hhe_cooling: float | None            # [Pa]
+    pressure_loss_per_length_hhe_heating: float        # [Pa/m]
+    pressure_loss_per_length_hhe_cooling: float | None # [Pa/m]
     mass_flow_rate_peak_hhe_heating: float              # [kg/s], per loop
     mass_flow_rate_peak_hhe_cooling: float | None       # [kg/s], per loop
+    diameter_outer_hhe: float                          # [m]
+    diameter_inner_hhe: float                          # [m]
+    sdr_hhe: float                                     # [-]
+    n_pipes_parallel_hhe: int                          # [-]
+    burial_depth_hhe: float                            # [m]
+    timestamp_run: datetime                            # timezone-aware local time
 
 
 def _hhe_mean_temperatures(
@@ -238,12 +247,15 @@ def run_hhe_sizing_workflow(
 
     # HHE pressure drop (full loop = out + return = 2 × L)
     Q_per_loop_heat = ground_loads.mass_flow_peak_summed_heating / (n_loops * brine.density)
-    pressure_loss_hhe_heating = float(_dp_per_m(brine.density, brine.dynamic_viscosity, Q_per_loop_heat, Di_hhe)) * 2.0 * L
+    pressure_loss_per_length_hhe_heating = float(_dp_per_m(brine.density, brine.dynamic_viscosity, Q_per_loop_heat, Di_hhe))
+    pressure_loss_hhe_heating = pressure_loss_per_length_hhe_heating * 2.0 * L
 
+    pressure_loss_per_length_hhe_cooling: float | None = None
     pressure_loss_hhe_cooling: float | None = None
     if ground_loads.has_cooling:
         Q_per_loop_cool = ground_loads.mass_flow_peak_summed_cooling / (n_loops * brine.density)
-        pressure_loss_hhe_cooling = float(_dp_per_m(brine.density, brine.dynamic_viscosity, Q_per_loop_cool, Di_hhe)) * 2.0 * L
+        pressure_loss_per_length_hhe_cooling = float(_dp_per_m(brine.density, brine.dynamic_viscosity, Q_per_loop_cool, Di_hhe))
+        pressure_loss_hhe_cooling = pressure_loss_per_length_hhe_cooling * 2.0 * L
 
     return HHEWorkflowResult(
         sizing=sizing,
@@ -269,6 +281,14 @@ def run_hhe_sizing_workflow(
         brine=brine,
         pressure_loss_hhe_heating=pressure_loss_hhe_heating,
         pressure_loss_hhe_cooling=pressure_loss_hhe_cooling,
+        pressure_loss_per_length_hhe_heating=pressure_loss_per_length_hhe_heating,
+        pressure_loss_per_length_hhe_cooling=pressure_loss_per_length_hhe_cooling,
         mass_flow_rate_peak_hhe_heating=mass_flow_rate_peak_hhe_heating,
         mass_flow_rate_peak_hhe_cooling=mass_flow_rate_peak_hhe_cooling,
+        diameter_outer_hhe=float(seg.diameter_outer),
+        diameter_inner_hhe=Di_hhe,
+        sdr_hhe=float(seg.sdr),
+        n_pipes_parallel_hhe=int(n_pipes),
+        burial_depth_hhe=float(pipe_infrastructure.burial_depth),
+        timestamp_run=datetime.now().astimezone(),
     )

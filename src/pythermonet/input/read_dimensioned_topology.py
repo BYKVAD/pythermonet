@@ -12,7 +12,7 @@ from pythermonet.core.pipe_segment import PipeSegment
 from pythermonet.components.pipe_infrastructure import PipeInfrastructure
 from pythermonet.components.distribution_network import DistributionNetwork
 from pythermonet.dimensioning.hydraulic_result import HydraulicResult
-from pythermonet.physics.hydraulics import reynolds_number
+from pythermonet.physics.hydraulics import pressure_loss_per_length, reynolds_number
 
 
 _REQUIRED_COLS = [
@@ -118,11 +118,18 @@ def read_dimensioned_topology_tsv_to_hydraulic(
         counts_trace=trace_counts,
     )
 
-    # --- Reynolds numbers ---
+    # --- Velocities, Reynolds numbers and pressure losses ---
+    L_tot = n_parallel_pipes * trace_lengths
     v_heat = q_heat / (np.pi * di_m**2 / 4.0)
     Re_heat = np.array(
         [reynolds_number(brine.density, brine.dynamic_viscosity, float(v), float(d))
          for v, d in zip(v_heat, di_m)],
+        dtype=float,
+    )
+    dp_m_heat = np.array(
+        [pressure_loss_per_length(
+            brine.density, brine.dynamic_viscosity, float(q), float(d))
+         for q, d in zip(q_heat, di_m)],
         dtype=float,
     )
 
@@ -134,9 +141,17 @@ def read_dimensioned_topology_tsv_to_hydraulic(
              for v, d in zip(v_cool, di_m)],
             dtype=float,
         )
+        dp_m_cool = np.array(
+            [pressure_loss_per_length(
+                brine.density, brine.dynamic_viscosity, float(q), float(d))
+             for q, d in zip(q_cool, di_m)],
+            dtype=float,
+        )
     else:
         q_cool = None
+        v_cool = None
         Re_cool = None
+        dp_m_cool = None
 
     hydraulic = HydraulicResult(
         network=network,
@@ -145,10 +160,14 @@ def read_dimensioned_topology_tsv_to_hydraulic(
         governing_mode=np.full(n, "heating", dtype=object),
         volume_flow_rates_peak_heating=q_heat,
         volume_flow_rates_peak_cooling=q_cool,
+        velocities_heating=v_heat,
+        velocities_cooling=v_cool,
         reynolds_numbers_heating=Re_heat,
         reynolds_numbers_cooling=Re_cool,
-        pressure_losses_heating=np.full(n, np.nan),
-        pressure_losses_cooling=np.full(n, np.nan) if has_cooling else None,
+        pressure_losses_per_length_heating=dp_m_heat,
+        pressure_losses_per_length_cooling=dp_m_cool,
+        pressure_losses_heating=L_tot * dp_m_heat,
+        pressure_losses_cooling=L_tot * dp_m_cool if has_cooling else None,
     )
 
     return network, hydraulic

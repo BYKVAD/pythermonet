@@ -12,9 +12,11 @@ Run with:
 """
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
-from conftest import EXAMPLES_DIR
+from conftest import EXAMPLES_DIR, REPORT_TIMESTAMP, REPORT_VERSION, TESTS_DATA_DIR
 
 from pythermonet.components import (
     BrineTemperatureLimits,
@@ -35,6 +37,11 @@ from pythermonet.input import (
     read_heat_pumps_tsv,
     read_pipe_catalog,
     read_undimensioned_topology_tsv,
+)
+from pythermonet.output import (
+    format_bhe_results,
+    print_bhe_results,
+    write_bhe_results_txt,
 )
 
 # ---------------------------------------------------------------------------
@@ -263,3 +270,50 @@ class TestBHEThermalDimensioning:
     def test_bhe_pressure_drop_cooling(self, bhe_dimensioning):
         _, result = bhe_dimensioning
         assert abs(result.pressure_loss_bhe_cooling - 155_427) < 1000
+
+
+# ===========================================================================
+# Results report (.txt) tests
+# ===========================================================================
+
+class TestResultsReport:
+
+    @pytest.fixture
+    def fixed_result(self, bhe_dimensioning, monkeypatch):
+        """Result with fixed run timestamp and pythermonet version."""
+        monkeypatch.setattr(
+            "pythermonet.output._report_tables.version", lambda _: REPORT_VERSION
+        )
+        _, result = bhe_dimensioning
+        return replace(result, timestamp_run=REPORT_TIMESTAMP)
+
+    def test_timestamp_run_is_timezone_aware(self, bhe_dimensioning):
+        _, result = bhe_dimensioning
+        assert result.timestamp_run.tzinfo is not None
+
+    def test_format_matches_pre_refactor_output(self, fixed_result):
+        # Expected text = header + stdout of print_bhe_results before the
+        # format/print/write refactor (content must be preserved).
+        expected_path = TESTS_DATA_DIR / "report_bhe_expected.txt"
+        expected = expected_path.read_bytes().decode("utf-8")
+        assert format_bhe_results(fixed_result) == expected
+
+    def test_print_matches_format(self, fixed_result, capsys):
+        print_bhe_results(fixed_result)
+        assert capsys.readouterr().out == "\n" + format_bhe_results(fixed_result)
+
+    def test_write_txt_is_utf8_lf(self, fixed_result, tmp_path):
+        path = tmp_path / "results.txt"
+        write_bhe_results_txt(fixed_result, path)
+        assert path.read_bytes() == format_bhe_results(fixed_result).encode("utf-8")
+        assert b"\r\n" not in path.read_bytes()
+
+    def test_write_txt_overwrites_existing_file(self, fixed_result, tmp_path):
+        path = tmp_path / "results.txt"
+        path.write_bytes(b"old content")
+        write_bhe_results_txt(fixed_result, path)
+        assert path.read_bytes() == format_bhe_results(fixed_result).encode("utf-8")
+
+    def test_write_txt_missing_folder_raises(self, fixed_result, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            write_bhe_results_txt(fixed_result, tmp_path / "missing" / "results.txt")

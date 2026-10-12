@@ -1,140 +1,93 @@
-"""Printing formatted HHE sizing results to the terminal."""
+"""Formatting HHE sizing results as text for the terminal and .txt files."""
 
 from __future__ import annotations
 
-import math
+import os
+from pathlib import Path
 
-import numpy as np
-
-from pythermonet.components.pipe_infrastructure import PipeInfrastructure
 from pythermonet.dimensioning.HHE.hhe_workflow import HHEWorkflowResult
-from pythermonet.physics.hydraulics import pressure_loss_per_length as _dp_per_m
+from pythermonet.output._report_tables import (
+    _format_header,
+    _format_temperature_table,
+    _format_trace_table,
+)
 
 
-def print_hhe_results(result: HHEWorkflowResult, pipe_infrastructure: PipeInfrastructure) -> None:
-    """Print formatted dimensioning results to terminal."""
-    hydraulic    = result.hydraulic
-    brine        = result.brine
-    sizing       = result.sizing
-    has_cooling  = result.loads_hhe_cooling is not None
-    network      = hydraulic.network
-    n_traces     = len(hydraulic.diameters_outer)
+def format_hhe_results(result: HHEWorkflowResult) -> str:
+    """
+    Format HHE dimensioning results as a text report.
 
-    # ── velocities and dp/m per trace ──────────────────────────────────────
-    A = math.pi * hydraulic.diameters_inner ** 2 / 4.0
-    v_heat = hydraulic.volume_flow_rates_peak_heating / A
-    dp_m_heat = np.array([
-        float(_dp_per_m(brine.density, brine.dynamic_viscosity,
-                         float(hydraulic.volume_flow_rates_peak_heating[i]),
-                         float(hydraulic.diameters_inner[i])))
-        for i in range(n_traces)
-    ])
+    The report contains a header (mode, pythermonet version, run time), the
+    distribution network table, the HHE sizing summary and the system mean
+    brine temperatures. The same result always gives the same text.
 
-    has_cool_hydro = has_cooling and hydraulic.volume_flow_rates_peak_cooling is not None
-    if has_cool_hydro:
-        v_cool = hydraulic.volume_flow_rates_peak_cooling / A
-        dp_m_cool = np.array([
-            float(_dp_per_m(brine.density, brine.dynamic_viscosity,
-                             float(hydraulic.volume_flow_rates_peak_cooling[i]),
-                             float(hydraulic.diameters_inner[i])))
-            for i in range(n_traces)
-        ])
-    else:
-        v_cool = dp_m_cool = None
+    Parameters
+    ----------
+    result : HHEWorkflowResult
+        Output of ``run_hhe_sizing_workflow``.
 
-    # ── distribution network table ─────────────────────────────────────────
-    TC, DC, VC, RC, PC = 14, 8, 10, 9, 12
+    Returns
+    -------
+    str
+        Report text with LF line endings, ending with a single newline.
+    """
+    sizing = result.sizing
+    has_cooling = result.loads_hhe_cooling is not None
 
-    base_cols = [TC, DC, DC, VC, RC, PC]
-    cols = base_cols + ([VC, RC, PC] if has_cool_hydro else [])
-
-    def _border(left, mid, right):
-        return left + mid.join('─' * w for w in cols) + right
-
-    def _cell(val: str, w: int, align: str = 'r') -> str:
-        inner = w - 2
-        return f' {val:<{inner}} ' if align == 'l' else f' {val:>{inner}} '
-
-    def _hrow() -> str:
-        cells = [
-            _cell('Trace', TC, 'l'),
-            _cell('Do[mm]', DC),
-            _cell('Di[mm]', DC),
-            _cell('v_H[m/s]', VC),
-            _cell('Re_H', RC),
-            _cell('dp_H[Pa/m]', PC),
-        ]
-        if has_cool_hydro:
-            cells += [_cell('v_C[m/s]', VC), _cell('Re_C', RC), _cell('dp_C[Pa/m]', PC)]
-        return '│' + '│'.join(cells) + '│'
-
-    def _drow(i: int) -> str:
-        name = network.names_trace[i]
-        if len(name) > TC - 2:
-            name = name[:TC - 5] + '...'
-        cells = [
-            _cell(name, TC, 'l'),
-            _cell(f'{hydraulic.diameters_outer[i] * 1000:.1f}', DC),
-            _cell(f'{hydraulic.diameters_inner[i] * 1000:.1f}', DC),
-            _cell(f'{v_heat[i]:.3f}', VC),
-            _cell(f'{hydraulic.reynolds_numbers_heating[i]:,.0f}', RC),
-            _cell(f'{dp_m_heat[i]:.1f}', PC),
-        ]
-        if has_cool_hydro:
-            cells += [
-                _cell(f'{v_cool[i]:.3f}', VC),
-                _cell(f'{hydraulic.reynolds_numbers_cooling[i]:,.0f}', RC),
-                _cell(f'{dp_m_cool[i]:.1f}', PC),
-            ]
-        return '│' + '│'.join(cells) + '│'
-
-    print('\n  Distribution network')
-    print(_border('┌', '┬', '┐'))
-    print(_hrow())
-    print(_border('├', '┼', '┤'))
-    for i in range(n_traces):
-        print(_drow(i))
-    print(_border('└', '┴', '┘'))
-
-    # ── HHE sizing + pressure drop ─────────────────────────────────────────
-    seg = pipe_infrastructure.segments_trace[0]
-    Di_hhe = float(seg.diameter_outer) * (1.0 - 2.0 / float(seg.sdr))
-    print()
-    print(f'  HHE loop length  :  {2.0 * sizing.length_element:.2f} m  (governed by {sizing.governing_mode})')
-    print(f'  Dist. fraction   :  {result.performance_thermonet_heating.load_supply_fraction * 100:.1f} %  (heating, distribution grid)')
+    lines = [f'  HHE loop length  :  {2.0 * sizing.length_element:.2f} m  (governed by {sizing.governing_mode})']
+    lines.append(f'  Dist. fraction   :  {result.performance_thermonet_heating.load_supply_fraction * 100:.1f} %  (heating, distribution grid)')
     if result.performance_thermonet_cooling is not None:
-        print(f'  Dist. fraction   :  {result.performance_thermonet_cooling.load_supply_fraction * 100:.1f} %  (cooling, distribution grid)')
-    print(f'  HHE Do / Di      :  {float(seg.diameter_outer)*1000:.1f} mm / {Di_hhe*1000:.1f} mm  '
-          f'(sdr {float(seg.sdr):.0f})')
-    print(f'  N parallel pipes :  {pipe_infrastructure.n_pipes_parallel}')
-    print(f'  Burial depth     :  {float(pipe_infrastructure.burial_depth):.2f} m')
-    hhe_dp_m_heat = result.pressure_loss_hhe_heating / (2.0 * sizing.length_element)
-    print(f'  HHE ΔP (heating) :  {result.pressure_loss_hhe_heating:,.0f} Pa  |  {hhe_dp_m_heat:.1f} Pa/m')
+        lines.append(f'  Dist. fraction   :  {result.performance_thermonet_cooling.load_supply_fraction * 100:.1f} %  (cooling, distribution grid)')
+    lines.append(f'  HHE Do / Di      :  {result.diameter_outer_hhe*1000:.1f} mm / {result.diameter_inner_hhe*1000:.1f} mm  '
+                 f'(sdr {result.sdr_hhe:.0f})')
+    lines.append(f'  N parallel pipes :  {result.n_pipes_parallel_hhe}')
+    lines.append(f'  Burial depth     :  {result.burial_depth_hhe:.2f} m')
+    lines.append(f'  HHE ΔP (heating) :  {result.pressure_loss_hhe_heating:,.0f} Pa  |  {result.pressure_loss_per_length_hhe_heating:.1f} Pa/m')
     if result.pressure_loss_hhe_cooling is not None:
-        hhe_dp_m_cool = result.pressure_loss_hhe_cooling / (2.0 * sizing.length_element)
-        print(f'  HHE ΔP (cooling) :  {result.pressure_loss_hhe_cooling:,.0f} Pa  |  {hhe_dp_m_cool:.1f} Pa/m')
+        lines.append(f'  HHE ΔP (cooling) :  {result.pressure_loss_hhe_cooling:,.0f} Pa  |  {result.pressure_loss_per_length_hhe_cooling:.1f} Pa/m')
 
-    # ── brine temperatures table ───────────────────────────────────────────
-    LW, VW = 36, 14
+    sections = [
+        _format_header('HHE', result.timestamp_run),
+        _format_trace_table(result.hydraulic, has_cooling),
+        '\n'.join(lines),
+        _format_temperature_table(
+            result.temperature_system_annual_heating,
+            result.temperature_system_winter_heating,
+            result.temperature_system_peak_heating,
+        ),
+    ]
+    return '\n\n'.join(sections) + '\n'
 
-    top_t = f"┌{'─'*LW}┬{'─'*VW}┬{'─'*VW}┬{'─'*VW}┐"
-    div_t = f"├{'─'*LW}┼{'─'*VW}┼{'─'*VW}┼{'─'*VW}┤"
-    bot_t = f"└{'─'*LW}┴{'─'*VW}┴{'─'*VW}┴{'─'*VW}┘"
 
-    def hdr() -> str:
-        return f"│{'':{LW}}│{'Annual':^{VW}}│{'Winter':^{VW}}│{'Peak':^{VW}}│"
+def print_hhe_results(result: HHEWorkflowResult) -> None:
+    """
+    Print HHE dimensioning results to the terminal.
 
-    def trow(label: str, a: float, w: float, p: float) -> str:
-        fa, fw, fp = f'{a:.2f}', f'{w:.2f}', f'{p:.2f}'
-        return f"│ {label:<{LW-2}} │{fa:>{VW-1}} │{fw:>{VW-1}} │{fp:>{VW-1}} │"
+    Parameters
+    ----------
+    result : HHEWorkflowResult
+        Output of ``run_hhe_sizing_workflow``.
+    """
+    print('\n' + format_hhe_results(result), end='')
 
-    print()
-    lines = [top_t, hdr(), div_t]
-    lines.append(trow(
-        'System mean temp (heating)   [°C]',
-        result.temperature_system_annual_heating,
-        result.temperature_system_winter_heating,
-        result.temperature_system_peak_heating,
-    ))
-    lines.append(bot_t)
-    print('\n'.join(lines))
+
+def write_hhe_results_txt(result: HHEWorkflowResult, path: str | os.PathLike) -> None:
+    """
+    Write the HHE results report to a UTF-8 text file with LF line endings.
+
+    The file holds exactly the text returned by ``format_hhe_results``. An
+    existing file is overwritten; missing parent folders are not created.
+
+    Parameters
+    ----------
+    result : HHEWorkflowResult
+        Output of ``run_hhe_sizing_workflow``.
+    path : str or os.PathLike
+        Destination file path.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the parent folder of ``path`` does not exist.
+    """
+    Path(path).write_bytes(format_hhe_results(result).encode('utf-8'))

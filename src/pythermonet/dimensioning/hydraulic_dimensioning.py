@@ -196,9 +196,9 @@ def run_pipedimensioning(
         ],
         dtype=float,
     )
-    pressure_losses_heating = np.array(
+    pressure_losses_per_length_heating = np.array(
         [
-            L_tot_arr[i] * dp(
+            dp(
                 brine.density,
                 brine.dynamic_viscosity,
                 float(m3_s_per_trace_heating[i]),
@@ -208,8 +208,11 @@ def run_pipedimensioning(
         ],
         dtype=float,
     )
+    pressure_losses_heating = L_tot_arr * pressure_losses_per_length_heating
 
+    v_C = None
     reynolds_numbers_cooling = None
+    pressure_losses_per_length_cooling = None
     pressure_losses_cooling = None
     if doCooling:
         v_C = m3_s_per_trace_cooling / (np.pi * installed_inner_diameter**2 / 4.0)
@@ -220,9 +223,9 @@ def run_pipedimensioning(
             ],
             dtype=float,
         )
-        pressure_losses_cooling = np.array(
+        pressure_losses_per_length_cooling = np.array(
             [
-                L_tot_arr[i] * dp(
+                dp(
                     brine.density,
                     brine.dynamic_viscosity,
                     float(m3_s_per_trace_cooling[i]),
@@ -232,6 +235,7 @@ def run_pipedimensioning(
             ],
             dtype=float,
         )
+        pressure_losses_cooling = L_tot_arr * pressure_losses_per_length_cooling
 
     return HydraulicResult(
         network=network,
@@ -240,8 +244,12 @@ def run_pipedimensioning(
         governing_mode=np.asarray(governing_mode, dtype=object),
         volume_flow_rates_peak_heating=m3_s_per_trace_heating,
         volume_flow_rates_peak_cooling=m3_s_per_trace_cooling,
+        velocities_heating=v_H,
+        velocities_cooling=v_C,
         reynolds_numbers_heating=reynolds_numbers_heating,
         reynolds_numbers_cooling=reynolds_numbers_cooling,
+        pressure_losses_per_length_heating=pressure_losses_per_length_heating,
+        pressure_losses_per_length_cooling=pressure_losses_per_length_cooling,
         pressure_losses_heating=pressure_losses_heating,
         pressure_losses_cooling=pressure_losses_cooling,
     )

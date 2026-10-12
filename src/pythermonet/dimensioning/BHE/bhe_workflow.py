@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 import numpy as np
 
@@ -49,8 +50,11 @@ class BHEWorkflowResult:
     brine: HeatCarrier
     pressure_loss_bhe_heating: float                    # [Pa]
     pressure_loss_bhe_cooling: float | None             # [Pa]
+    pressure_loss_per_length_bhe_heating: float         # [Pa/m], U-pipe at peak flow
+    pressure_loss_per_length_bhe_cooling: float | None  # [Pa/m], U-pipe at peak flow
     mass_flow_rate_peak_bhe_heating: float               # [kg/s], per borehole
     mass_flow_rate_peak_bhe_cooling: float | None        # [kg/s], per borehole
+    timestamp_run: datetime                              # timezone-aware local time
 
 
 def run_bhe_sizing_workflow(
@@ -155,17 +159,22 @@ def run_bhe_sizing_workflow(
     # BHE pressure drop at peak flow (2 legs of the U-pipe)
     Di_bhe = float(vhe_field.pipe.diameter_outer) * (1.0 - 2.0 / float(vhe_field.pipe.sdr))
     Q_per_bh_heat = ground_loads.mass_flow_peak_summed_heating / (n_boreholes * brine.density)
+    pressure_loss_per_length_bhe_heating = float(
+        _dp_per_m(brine.density, brine.dynamic_viscosity, Q_per_bh_heat, Di_bhe)
+    )
     pressure_loss_bhe_heating = (
-        float(_dp_per_m(brine.density, brine.dynamic_viscosity, Q_per_bh_heat, Di_bhe))
-        * 2.0 * field_sizing.length_element
+        pressure_loss_per_length_bhe_heating * 2.0 * field_sizing.length_element
     )
 
+    pressure_loss_per_length_bhe_cooling: float | None = None
     pressure_loss_bhe_cooling: float | None = None
     if ground_loads.has_cooling:
         Q_per_bh_cool = ground_loads.mass_flow_peak_summed_cooling / (n_boreholes * brine.density)
+        pressure_loss_per_length_bhe_cooling = float(
+            _dp_per_m(brine.density, brine.dynamic_viscosity, Q_per_bh_cool, Di_bhe)
+        )
         pressure_loss_bhe_cooling = (
-            float(_dp_per_m(brine.density, brine.dynamic_viscosity, Q_per_bh_cool, Di_bhe))
-            * 2.0 * field_sizing.length_element
+            pressure_loss_per_length_bhe_cooling * 2.0 * field_sizing.length_element
         )
 
     return BHEWorkflowResult(
@@ -181,6 +190,9 @@ def run_bhe_sizing_workflow(
         brine=brine,
         pressure_loss_bhe_heating=pressure_loss_bhe_heating,
         pressure_loss_bhe_cooling=pressure_loss_bhe_cooling,
+        pressure_loss_per_length_bhe_heating=pressure_loss_per_length_bhe_heating,
+        pressure_loss_per_length_bhe_cooling=pressure_loss_per_length_bhe_cooling,
         mass_flow_rate_peak_bhe_heating=mass_flow_rate_peak_bhe_heating,
         mass_flow_rate_peak_bhe_cooling=mass_flow_rate_peak_bhe_cooling,
+        timestamp_run=datetime.now().astimezone(),
     )
