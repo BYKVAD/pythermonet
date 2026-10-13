@@ -28,7 +28,8 @@ def _format_trace_table(hydraulic: HydraulicResult, has_cooling: bool) -> str:
     n_traces = len(hydraulic.diameters_outer)
     has_cool_hydro = has_cooling and hydraulic.velocities_cooling is not None
 
-    TC, DC, VC, RC, PC = 14, 8, 10, 9, 12
+    TC = max(len('Trace'), *(len(name) for name in network.names_trace)) + 2
+    DC, VC, RC, PC = 8, 10, 9, 12
 
     base_cols = [TC, DC, DC, VC, RC, PC]
     cols = base_cols + ([VC, RC, PC] if has_cool_hydro else [])
@@ -54,11 +55,8 @@ def _format_trace_table(hydraulic: HydraulicResult, has_cooling: bool) -> str:
         return '│' + '│'.join(cells) + '│'
 
     def _drow(i: int) -> str:
-        name = network.names_trace[i]
-        if len(name) > TC - 2:
-            name = name[:TC - 5] + '...'
         cells = [
-            _cell(name, TC, 'l'),
+            _cell(network.names_trace[i], TC, 'l'),
             _cell(f'{hydraulic.diameters_outer[i] * 1000:.1f}', DC),
             _cell(f'{hydraulic.diameters_inner[i] * 1000:.1f}', DC),
             _cell(f'{hydraulic.velocities_heating[i]:.3f}', VC),
