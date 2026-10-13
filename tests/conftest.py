@@ -22,3 +22,16 @@ TESTS_DATA_DIR = _REPO_ROOT / "tests" / "data"
 # tests/data/report_*_expected.txt.
 REPORT_TIMESTAMP = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone(timedelta(hours=1)))
 REPORT_VERSION = "0.0.0-test"
+
+RESULTS_JSON_SECTIONS = {"metadata", "ground_field", "distribution_network", "system"}
+
+
+def iter_results_entries(results: dict) -> list[tuple[str, dict]]:
+    """All (key, entry) pairs of a results dict, skipping the metadata section."""
+    entries = []
+    sections = [results["ground_field"], results["system"],
+                results["distribution_network"]["performance"],
+                results["distribution_network"]["traces"]]
+    for section in sections:
+        entries.extend(section.items())
+    return entries

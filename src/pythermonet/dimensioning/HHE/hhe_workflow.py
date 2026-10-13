@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 import numpy as np
@@ -28,33 +28,41 @@ from pythermonet.simulation.run_distribution_pipe_thermal_model import (
 
 @dataclass(frozen=True)
 class HHEWorkflowResult:
+    """
+    Output of the HHE sizing workflow.
+
+    Load arrays are ordered [annual, winter, peak] (heating) or
+    [annual, summer, peak] (cooling) in watts. Field metadata holds each
+    quantity's unit and description (used by the results JSON writer).
+    """
+
     sizing: FieldSizingResult
-    temperature_hhe_annual_heating: float              # [°C]
-    temperature_hhe_winter_heating: float              # [°C]
-    temperature_hhe_peak_heating: float                # [°C]
-    temperature_hhe_annual_cooling: float | None       # [°C]
-    temperature_hhe_summer_cooling: float | None       # [°C]
-    temperature_hhe_peak_cooling: float | None         # [°C]
-    temperature_system_annual_heating: float           # [°C]
-    temperature_system_winter_heating: float           # [°C]
-    temperature_system_peak_heating: float             # [°C]
-    temperature_system_annual_cooling: float | None    # [°C]
-    temperature_system_summer_cooling: float | None    # [°C]
-    temperature_system_peak_cooling: float | None      # [°C]
-    loads_hhe_heating: np.ndarray                      # [W]
-    loads_hhe_cooling: np.ndarray | None               # [W]
-    loads_total_heating: np.ndarray                    # [W]
-    loads_total_cooling: np.ndarray | None             # [W]
+    temperature_hhe_annual_heating: float = field(metadata={"unit": "degC", "description": "Mean brine temperature in the horizontal heat exchanger, annual pulse, heating"})
+    temperature_hhe_winter_heating: float = field(metadata={"unit": "degC", "description": "Mean brine temperature in the horizontal heat exchanger, winter pulse, heating"})
+    temperature_hhe_peak_heating: float = field(metadata={"unit": "degC", "description": "Mean brine temperature in the horizontal heat exchanger, peak pulse, heating"})
+    temperature_hhe_annual_cooling: float | None = field(metadata={"unit": "degC", "description": "Mean brine temperature in the horizontal heat exchanger, annual pulse, cooling"})
+    temperature_hhe_summer_cooling: float | None = field(metadata={"unit": "degC", "description": "Mean brine temperature in the horizontal heat exchanger, summer pulse, cooling"})
+    temperature_hhe_peak_cooling: float | None = field(metadata={"unit": "degC", "description": "Mean brine temperature in the horizontal heat exchanger, peak pulse, cooling"})
+    temperature_system_annual_heating: float = field(metadata={"unit": "degC", "description": "Volume-weighted mean brine temperature of the whole circuit, annual pulse, heating"})
+    temperature_system_winter_heating: float = field(metadata={"unit": "degC", "description": "Volume-weighted mean brine temperature of the whole circuit, winter pulse, heating"})
+    temperature_system_peak_heating: float = field(metadata={"unit": "degC", "description": "Volume-weighted mean brine temperature of the whole circuit, peak pulse, heating"})
+    temperature_system_annual_cooling: float | None = field(metadata={"unit": "degC", "description": "Volume-weighted mean brine temperature of the whole circuit, annual pulse, cooling"})
+    temperature_system_summer_cooling: float | None = field(metadata={"unit": "degC", "description": "Volume-weighted mean brine temperature of the whole circuit, summer pulse, cooling"})
+    temperature_system_peak_cooling: float | None = field(metadata={"unit": "degC", "description": "Volume-weighted mean brine temperature of the whole circuit, peak pulse, cooling"})
+    loads_hhe_heating: np.ndarray = field(metadata={"unit": "W", "description": "Ground load on the horizontal heat exchanger after the distribution pipes' share, [annual, winter, peak], heating"})
+    loads_hhe_cooling: np.ndarray | None = field(metadata={"unit": "W", "description": "Ground load on the horizontal heat exchanger after the distribution pipes' share, [annual, summer, peak], cooling"})
+    loads_total_heating: np.ndarray = field(metadata={"unit": "W", "description": "Total ground load of all heat pumps (annually balanced), [annual, winter, peak], heating"})
+    loads_total_cooling: np.ndarray | None = field(metadata={"unit": "W", "description": "Total ground load of all heat pumps (annually balanced), [annual, summer, peak], cooling"})
     performance_thermonet_heating: ThermonetPerformance
     performance_thermonet_cooling: ThermonetPerformance | None
     hydraulic: HydraulicResult
     brine: HeatCarrier
-    pressure_loss_hhe_heating: float                   # [Pa]
-    pressure_loss_hhe_cooling: float | None            # [Pa]
-    pressure_loss_per_length_hhe_heating: float        # [Pa/m]
-    pressure_loss_per_length_hhe_cooling: float | None # [Pa/m]
-    mass_flow_rate_peak_hhe_heating: float              # [kg/s], per loop
-    mass_flow_rate_peak_hhe_cooling: float | None       # [kg/s], per loop
+    pressure_loss_hhe_heating: float = field(metadata={"unit": "Pa", "description": "Pressure loss through one HHE loop (out and return) at peak flow, heating"})
+    pressure_loss_hhe_cooling: float | None = field(metadata={"unit": "Pa", "description": "Pressure loss through one HHE loop (out and return) at peak flow, cooling"})
+    pressure_loss_per_length_hhe_heating: float = field(metadata={"unit": "Pa/m", "description": "Pressure loss per HHE pipe length at peak flow, heating"})
+    pressure_loss_per_length_hhe_cooling: float | None = field(metadata={"unit": "Pa/m", "description": "Pressure loss per HHE pipe length at peak flow, cooling"})
+    mass_flow_rate_peak_hhe_heating: float = field(metadata={"unit": "kg/s", "description": "Peak brine mass flow per HHE loop, heating"})
+    mass_flow_rate_peak_hhe_cooling: float | None = field(metadata={"unit": "kg/s", "description": "Peak brine mass flow per HHE loop, cooling"})
     diameter_outer_hhe: float                          # [m]
     diameter_inner_hhe: float                          # [m]
     sdr_hhe: float                                     # [-]

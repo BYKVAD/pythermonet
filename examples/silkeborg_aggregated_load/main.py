@@ -14,7 +14,11 @@ from pythermonet.input import (
     read_aggregated_load_tsv,
     read_dimensioned_topology_tsv_to_hydraulic,
 )
-from pythermonet.output import print_bhe_results, save_bhe_results_txt
+from pythermonet.output import (
+    print_bhe_results,
+    save_bhe_results_json,
+    save_bhe_results_txt,
+)
 
 # -----------------------------------------------------------------------------
 # Paths
@@ -136,3 +140,4 @@ print_bhe_results(result)
 out_dir = PROJECT_DIR / "out"
 out_dir.mkdir(exist_ok=True)
 save_bhe_results_txt(result, out_dir / "results.txt")
+save_bhe_results_json(result, out_dir / "results.json")

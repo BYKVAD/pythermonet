@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 import numpy as np
@@ -36,24 +36,26 @@ class BHEWorkflowResult:
     Load arrays are ordered [annual, winter, peak] in watts.
     ``loads_bhe_heating`` is the BHE portion after subtracting the
     thermonet distribution pipe contribution from ``loads_total_heating``.
+    Field metadata holds each quantity's unit and description (used by the
+    results JSON writer).
     """
 
     sizing: FieldSizingResult
     temperatures_system: SystemBrineTemperatureResult
-    loads_bhe_heating: np.ndarray                       # [W]
-    loads_bhe_cooling: np.ndarray | None                # [W]
-    loads_total_heating: np.ndarray                     # [W]
-    loads_total_cooling: np.ndarray | None              # [W]
+    loads_bhe_heating: np.ndarray = field(metadata={"unit": "W", "description": "Ground load on the borehole field after the distribution pipes' share, [annual, winter, peak], heating"})
+    loads_bhe_cooling: np.ndarray | None = field(metadata={"unit": "W", "description": "Ground load on the borehole field after the distribution pipes' share, [annual, summer, peak], cooling"})
+    loads_total_heating: np.ndarray = field(metadata={"unit": "W", "description": "Total ground load of all heat pumps (annually balanced), [annual, winter, peak], heating"})
+    loads_total_cooling: np.ndarray | None = field(metadata={"unit": "W", "description": "Total ground load of all heat pumps (annually balanced), [annual, summer, peak], cooling"})
     performance_thermonet_heating: ThermonetPerformance
     performance_thermonet_cooling: ThermonetPerformance | None
     hydraulic: HydraulicResult
     brine: HeatCarrier
-    pressure_loss_bhe_heating: float                    # [Pa]
-    pressure_loss_bhe_cooling: float | None             # [Pa]
-    pressure_loss_per_length_bhe_heating: float         # [Pa/m], U-pipe at peak flow
-    pressure_loss_per_length_bhe_cooling: float | None  # [Pa/m], U-pipe at peak flow
-    mass_flow_rate_peak_bhe_heating: float               # [kg/s], per borehole
-    mass_flow_rate_peak_bhe_cooling: float | None        # [kg/s], per borehole
+    pressure_loss_bhe_heating: float = field(metadata={"unit": "Pa", "description": "Pressure loss through one borehole's U-pipe (both legs) at peak flow, heating"})
+    pressure_loss_bhe_cooling: float | None = field(metadata={"unit": "Pa", "description": "Pressure loss through one borehole's U-pipe (both legs) at peak flow, cooling"})
+    pressure_loss_per_length_bhe_heating: float = field(metadata={"unit": "Pa/m", "description": "Pressure loss per U-pipe length at peak flow, heating"})
+    pressure_loss_per_length_bhe_cooling: float | None = field(metadata={"unit": "Pa/m", "description": "Pressure loss per U-pipe length at peak flow, cooling"})
+    mass_flow_rate_peak_bhe_heating: float = field(metadata={"unit": "kg/s", "description": "Peak brine mass flow per borehole, heating"})
+    mass_flow_rate_peak_bhe_cooling: float | None = field(metadata={"unit": "kg/s", "description": "Peak brine mass flow per borehole, cooling"})
     timestamp_run: datetime                              # timezone-aware local time
 
 

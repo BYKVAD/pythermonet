@@ -26,7 +26,11 @@ from pythermonet.input import (
     read_pipe_catalog,
     read_undimensioned_topology_tsv,
 )
-from pythermonet.output import print_hhe_results, save_hhe_results_txt
+from pythermonet.output import (
+    print_hhe_results,
+    save_hhe_results_json,
+    save_hhe_results_txt,
+)
 
 # -----------------------------------------------------------------------------
 # Paths
@@ -170,3 +174,4 @@ print_hhe_results(result)
 out_dir = PROJECT_DIR / "out"
 out_dir.mkdir(exist_ok=True)
 save_hhe_results_txt(result, out_dir / "results.txt")
+save_hhe_results_json(result, out_dir / "results.json")

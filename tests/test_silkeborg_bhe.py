@@ -12,11 +12,20 @@ Run with:
 """
 from __future__ import annotations
 
+import json
 from dataclasses import replace
+from importlib.metadata import version
 
 import numpy as np
 import pytest
-from conftest import EXAMPLES_DIR, REPORT_TIMESTAMP, REPORT_VERSION, TESTS_DATA_DIR
+from conftest import (
+    EXAMPLES_DIR,
+    REPORT_TIMESTAMP,
+    REPORT_VERSION,
+    RESULTS_JSON_SECTIONS,
+    TESTS_DATA_DIR,
+    iter_results_entries,
+)
 
 from pythermonet.components import (
     BrineTemperatureLimits,
@@ -39,8 +48,10 @@ from pythermonet.input import (
     read_undimensioned_topology_tsv,
 )
 from pythermonet.output import (
+    bhe_results_to_dict,
     format_bhe_results,
     print_bhe_results,
+    save_bhe_results_json,
     save_bhe_results_txt,
 )
 
@@ -317,3 +328,92 @@ class TestResultsReport:
     def test_save_txt_missing_folder_raises(self, fixed_result, tmp_path):
         with pytest.raises(FileNotFoundError):
             save_bhe_results_txt(fixed_result, tmp_path / "missing" / "results.txt")
+
+
+# ===========================================================================
+# Results JSON tests
+# ===========================================================================
+
+class TestResultsJson:
+
+    @pytest.fixture
+    def results(self, bhe_dimensioning):
+        _, result = bhe_dimensioning
+        return bhe_results_to_dict(result)
+
+    def test_sections(self, results):
+        assert set(results) == RESULTS_JSON_SECTIONS
+        assert set(results["distribution_network"]) == {"performance", "traces"}
+
+    def test_metadata(self, bhe_dimensioning, results):
+        _, result = bhe_dimensioning
+        assert results["metadata"] == {
+            "ground_field_type": "BHE",
+            "pythermonet_version": version("pythermonet"),
+            "timestamp_run": result.timestamp_run.isoformat(timespec="seconds"),
+        }
+
+    def test_every_entry_has_value_unit_description(self, results):
+        for key, entry in iter_results_entries(results):
+            assert set(entry) == {"value", "unit", "description"}, key
+            assert entry["unit"] and entry["description"], key
+
+    def test_traces_align_with_names(self, results):
+        traces = results["distribution_network"]["traces"]
+        n_traces = len(traces["names_trace"]["value"])
+        for key, entry in traces.items():
+            assert len(entry["value"]) == n_traces, key
+
+    def test_no_input_echoes(self, results):
+        keys = {key for key, _ in iter_results_entries(results)}
+        excluded = {
+            "brine", "sdr", "heat_pump_ids_trace", "temperature_thermonet_peak_heating"
+        }
+        assert not keys & excluded
+
+    def test_values_match_result(self, bhe_dimensioning, results):
+        _, result = bhe_dimensioning
+        ground_field = results["ground_field"]
+        traces = results["distribution_network"]["traces"]
+        assert ground_field["length_element"]["value"] == result.sizing.length_element
+        assert traces["diameters_outer"]["value"] == (
+            result.hydraulic.diameters_outer.tolist()
+        )
+
+    def test_absent_mode_is_null_with_same_keys(self, bhe_dimensioning, results):
+        _, result = bhe_dimensioning
+        without_cooling = bhe_results_to_dict(
+            replace(result, performance_thermonet_cooling=None)
+        )
+        performance = without_cooling["distribution_network"]["performance"]
+        assert performance["load_supply_fraction_cooling"]["value"] is None
+        assert [key for key, _ in iter_results_entries(without_cooling)] == (
+            [key for key, _ in iter_results_entries(results)]
+        )
+
+    def test_save_json_equals_dict(self, bhe_dimensioning, results, tmp_path):
+        _, result = bhe_dimensioning
+        path = tmp_path / "results.json"
+        save_bhe_results_json(result, path)
+        assert json.loads(path.read_bytes().decode("utf-8")) == results
+        assert b"\r\n" not in path.read_bytes()
+
+    def test_save_json_one_line_per_entry(self, bhe_dimensioning, results, tmp_path):
+        _, result = bhe_dimensioning
+        path = tmp_path / "results.json"
+        save_bhe_results_json(result, path)
+        lines = path.read_text("utf-8").splitlines()
+        entry_lines = [line for line in lines if '"value": ' in line]
+        assert len(entry_lines) == len(iter_results_entries(results))
+        assert all(line.rstrip(",").endswith("}") for line in entry_lines)
+
+    def test_save_json_nan_raises(self, bhe_dimensioning, tmp_path):
+        _, result = bhe_dimensioning
+        result_nan = replace(result, pressure_loss_bhe_heating=float("nan"))
+        with pytest.raises(ValueError):
+            save_bhe_results_json(result_nan, tmp_path / "results.json")
+
+    def test_save_json_missing_folder_raises(self, bhe_dimensioning, tmp_path):
+        _, result = bhe_dimensioning
+        with pytest.raises(FileNotFoundError):
+            save_bhe_results_json(result, tmp_path / "missing" / "results.json")

@@ -1,6 +1,6 @@
 # src/pythermonet/components/distribution_network.py
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import numpy as np
 
 from pythermonet.components.pipe_infrastructure import PipeInfrastructure
@@ -68,13 +68,14 @@ class UndimensionedTopologyInput:
 
 @dataclass(frozen=True, slots=True)
 class DistributionNetwork:
+    # Metadata (unit, description) only on fields exported to the results JSON.
     pipe_infrastructure: PipeInfrastructure
-    names_trace: list[str]
+    names_trace: list[str] = field(metadata={"unit": "-", "description": "Section name per trace (topology row)"})
     heat_pump_ids_trace: list[np.ndarray]
     pressure_losses_max_trace: np.ndarray
     sdr: np.ndarray
-    lengths_trace: np.ndarray
-    counts_trace: np.ndarray
+    lengths_trace: np.ndarray = field(metadata={"unit": "m", "description": "One-way trace length per section"})
+    counts_trace: np.ndarray = field(metadata={"unit": "-", "description": "Number of identical traces (pipes) the section represents"})
 
     material_pipe: Material | None = None  # shared pipe material — must be identical across all trace segments
 

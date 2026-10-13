@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 import numpy as np
 
@@ -83,11 +83,15 @@ class ThermonetPerformance:
         through heat exchange with the surrounding soil. Used to reduce the
         BHE or HHE sizing load.
     load_supply_fractions_per_group : ndarray
-        Same fraction broken down per pipe group.
+        Same fraction broken down per pipe group. A pipe group is one topology
+        section and covers all of its identical pipes (``counts_trace``).
+
+    Field metadata holds each quantity's unit and description (used by the
+    results JSON writer).
     """
-    temperatures_mean: np.ndarray              # [°C]
-    load_supply_fraction: float
-    load_supply_fractions_per_group: np.ndarray
+    temperatures_mean: np.ndarray = field(metadata={"unit": "degC", "description": "Volume-weighted mean brine temperature in the distribution pipes only, [annual, seasonal, peak]"})
+    load_supply_fraction: float = field(metadata={"unit": "-", "description": "Share of the total ground load supplied by the distribution pipes"})
+    load_supply_fractions_per_group: np.ndarray = field(metadata={"unit": "-", "description": "Share of the total ground load supplied per section, all pipes of the section combined"})
 
 
 # -----------------------------

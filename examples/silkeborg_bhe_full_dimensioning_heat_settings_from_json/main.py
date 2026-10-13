@@ -19,7 +19,11 @@ from pythermonet.input import (
     read_pipe_catalog,
     read_undimensioned_topology_tsv,
 )
-from pythermonet.output import print_bhe_results, save_bhe_results_txt
+from pythermonet.output import (
+    print_bhe_results,
+    save_bhe_results_json,
+    save_bhe_results_txt,
+)
 from pythermonet.resources import SETTINGS_TEMPLATE_BHE_PATH
 
 # -----------------------------------------------------------------------------
@@ -129,3 +133,4 @@ print_bhe_results(result)
 out_dir = PROJECT_DIR / "out"
 out_dir.mkdir(exist_ok=True)
 save_bhe_results_txt(result, out_dir / "results.txt")
+save_bhe_results_json(result, out_dir / "results.json")
