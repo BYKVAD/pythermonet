@@ -5,29 +5,46 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-from pythermonet.components.ground_loads import ground_loads_from_district
-from pythermonet.components.pipe_infrastructure import PipeInfrastructure
-from pythermonet.core.material import Material
-from pythermonet.core.heat_carrier import HeatCarrier
-from pythermonet.core.pipe_segment import PipeSegment
-from pythermonet.core.soil import Soil
-from pythermonet.dimensioning.ground_field import HHEGroundField
-from pythermonet.dimensioning.HHE.hhe_workflow import run_hhe_sizing_workflow, print_hhe_results
-from pythermonet.dimensioning.sizing_parameters import SizingParameters
-from pythermonet.input.read_dimensioned_topology import read_dimensioned_topology_tsv_to_hydraulic
-from pythermonet.input.read_aggregated_load import read_aggregated_load_tsv
+from pythermonet.components import (
+    BrineTemperatureLimits,
+    DistributionNetworkParameters,
+    HeatPumpPeakSupplyParameters,
+    HHEFieldParameters,
+    build_distribution_network,
+    build_hhe_field,
+    ground_loads_from_heat_pumps,
+)
+from pythermonet.core import HeatCarrier, Material, PipeSegmentParameters, Soil
+from pythermonet.dimensioning import (
+    HHEGroundField,
+    SizingParameters,
+    run_hhe_sizing_workflow,
+    run_pipedimensioning,
+)
+from pythermonet.input import (
+    read_heat_pumps_tsv,
+    read_pipe_catalog,
+    read_undimensioned_topology_tsv,
+)
+from pythermonet.output import (
+    print_hhe_results,
+    save_hhe_results_json,
+    save_hhe_results_txt,
+)
 
 # -----------------------------------------------------------------------------
 # Paths
 # -----------------------------------------------------------------------------
 PROJECT_DIR = Path(__file__).resolve().parent
 
-agg_load_file  = PROJECT_DIR / "data/silkeborg_hhe_aggregated_load_heat.dat"
-topology_file  = PROJECT_DIR / "data/silkeborg_hhe_topology_dimensioned.dat"
+heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat_only.dat"
+topology_file = PROJECT_DIR / "data/silkeborg_topology.dat"
 
 # -----------------------------------------------------------------------------
-# 1) Define materials, brine, soil
+# 1) Read pipe catalog, define materials + fluids + soil
 # -----------------------------------------------------------------------------
+pipe_catalog = read_pipe_catalog()
+
 pipe_material_dist = Material(
     density=975,
     specific_heat=1900,
@@ -53,56 +70,70 @@ soil = Soil(
 )
 
 # -----------------------------------------------------------------------------
-# 2) Distribution network (pre-dimensioned — no hydraulic sizing needed)
+# 2) Distribution network
 # -----------------------------------------------------------------------------
-_, hydraulic = read_dimensioned_topology_tsv_to_hydraulic(
-    topology_file,
-    pipe_material=pipe_material_dist,
-    brine=brine,
+network_parameters = DistributionNetworkParameters(
+    roughness=1e-6,
     burial_depth=1.2,
-    pipe_distance=0.3,
-    n_parallel_pipes=2,
+    pipe_spacing=0.3,
+    n_pipes_parallel=2,
+)
+
+topology = read_undimensioned_topology_tsv(topology_file)
+distribution_network_undimensioned = build_distribution_network(
+    topology,
+    pipe_material=pipe_material_dist,
+    network_parameters=network_parameters,
 )
 
 # -----------------------------------------------------------------------------
 # 3) HHE field  (20 parallel pipes = 10 loops, horizontal, 1.2 m burial depth)
 # -----------------------------------------------------------------------------
-hhe_pipe_material = pipe_material_dist
+pipe_material_hhe = pipe_material_dist
 
-hhe_segment = PipeSegment(
+pipe_segment_parameters_hhe = PipeSegmentParameters(
     diameter_outer=0.040,   # 40 mm OD
     sdr=17.0,
-    material=hhe_pipe_material,
     roughness=1e-6,
-    id_=0,
-    length=100.0,           # placeholder — will be sized
 )
 
-pipe_infrastructure = PipeInfrastructure(
+hhe_field_parameters = HHEFieldParameters(
     n_pipes_parallel=20,      # 10 loops (outgoing + return)
-    segments_trace=[hhe_segment],
     pipe_spacing=1.5,        # lateral spacing between pipes [m]
     burial_depth=1.2,        # m
+    length_element=100.0,    # placeholder — sized by the HHE bisection solver
 )
 
-hhe_field = HHEGroundField(
-    pipe_infrastructure=pipe_infrastructure,
+pipe_infrastructure_hhe = build_hhe_field(
+    segment_parameters=pipe_segment_parameters_hhe,
+    field_parameters=hhe_field_parameters,
+    pipe_material=pipe_material_hhe,
+)
+
+ground_field_hhe = HHEGroundField(
+    pipe_infrastructure=pipe_infrastructure_hhe,
     soil_thermal_conductivity_heating=float(soil.thermal_conductivity_shallow_heating),
     soil_thermal_conductivity_cooling=float(soil.thermal_conductivity_shallow_cooling),
 )
 
 # -----------------------------------------------------------------------------
-# 4) Aggregated heat pump loads
+# 4) Heat pumps
 # -----------------------------------------------------------------------------
-agg_load_input = read_aggregated_load_tsv(agg_load_file)
+hp_list = read_heat_pumps_tsv(path=heat_pump_file)
 
-loads = ground_loads_from_district(
-    agg_load_input,
-    brine,
-    f_peak_heating=1.0,
-    f_peak_cooling=1.0,
+peak_supply = HeatPumpPeakSupplyParameters(
     peak_hours_heating=4.0,
+    peak_fraction_heating_mode="incremental",
+    peak_fraction_heating=1.0,
     peak_hours_cooling=4.0,
+    peak_fraction_cooling_mode="incremental",
+    peak_fraction_cooling=1.0,
+)
+
+loads = ground_loads_from_heat_pumps(
+    hp_list,
+    brine=brine,
+    peak_supply=peak_supply,
 )
 
 sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
@@ -110,21 +141,37 @@ sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
 # -----------------------------------------------------------------------------
 # 5) Brine temperature limits
 # -----------------------------------------------------------------------------
-T_BRINE_MIN_HEAT = -3.0   # HP evaporator inlet limit [°C]
-T_BRINE_MAX_COOL = 20.0   # HP condenser inlet limit [°C]
+brine_temperature_limits = BrineTemperatureLimits(
+    temperature_brine_min_heating=-3.0,
+    temperature_brine_max_cooling=20.0,
+)
 
 # -----------------------------------------------------------------------------
-# 6) HHE sizing workflow + results
+# 6) Hydraulic pipe network sizing (mode-specific)
+# -----------------------------------------------------------------------------
+hydraulic = run_pipedimensioning(
+    pipe_catalog,
+    brine,
+    distribution_network_undimensioned,
+    hp_list,
+)
+
+# -----------------------------------------------------------------------------
+# 7) HHE sizing workflow + results
 # -----------------------------------------------------------------------------
 result = run_hhe_sizing_workflow(
     ground_loads=loads,
-    hhe_field=hhe_field,
-    pipe_infrastructure=pipe_infrastructure,
+    hhe_field=ground_field_hhe,
+    pipe_infrastructure=pipe_infrastructure_hhe,
     hydraulic=hydraulic,
     brine=brine,
     soil=soil,
     sizing=sizing,
-    T_brine_min_heat=T_BRINE_MIN_HEAT,
-    T_brine_max_cool=T_BRINE_MAX_COOL,
+    brine_temperature_limits=brine_temperature_limits,
 )
-print_hhe_results(result, pipe_infrastructure)
+print_hhe_results(result)
+
+out_dir = PROJECT_DIR / "out"
+out_dir.mkdir(exist_ok=True)
+save_hhe_results_txt(result, out_dir / "results.txt")
+save_hhe_results_json(result, out_dir / "results.json")

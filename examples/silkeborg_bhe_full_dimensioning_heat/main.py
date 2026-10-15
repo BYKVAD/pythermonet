@@ -5,37 +5,45 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-from pythermonet.components.ground_loads import ground_loads_from_heat_pumps
-from pythermonet.core.material import Material
-from pythermonet.core.heat_carrier import HeatCarrier
-from pythermonet.core.soil import Soil
-from pythermonet.input.read_pipe_catalogue import read_pipe_catalogue
-from pythermonet.input.read_topology import read_undimensioned_topology_tsv_to_network
-from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
-from pythermonet.dimensioning.hydraulic_dimensioning import run_pipedimensioning
-
-from pythermonet.components.vhe_field import VHEField
-from pythermonet.core.annulus import Annulus
-from pythermonet.core.pipe_segment import PipeSegment
-
-from pythermonet.dimensioning.BHE.bhe_workflow import run_bhe_sizing_workflow, print_bhe_results
-from pythermonet.dimensioning.sizing_parameters import SizingParameters
+from pythermonet.components import (
+    BrineTemperatureLimits,
+    DistributionNetworkParameters,
+    HeatPumpPeakSupplyParameters,
+    VHEFieldParameters,
+    build_distribution_network,
+    build_vhe_field,
+    ground_loads_from_heat_pumps,
+)
+from pythermonet.core import Annulus, HeatCarrier, Material, PipeSegmentParameters, Soil
+from pythermonet.dimensioning import (
+    SizingParameters,
+    run_bhe_sizing_workflow,
+    run_pipedimensioning,
+)
+from pythermonet.input import (
+    read_heat_pumps_tsv,
+    read_pipe_catalog,
+    read_undimensioned_topology_tsv,
+)
+from pythermonet.output import (
+    print_bhe_results,
+    save_bhe_results_json,
+    save_bhe_results_txt,
+)
 
 # -----------------------------------------------------------------------------
 # Paths
 # -----------------------------------------------------------------------------
 PROJECT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = PROJECT_DIR.parents[2]
 
-pipe_catalogue_file = REPO_ROOT / "PythermonetII/src/pythermonet/resources/pipe_catalogue.csv"
 heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat_high_cool.dat"
 topology_file = PROJECT_DIR / "data/silkeborg_topology.dat"
 
 
 # -----------------------------------------------------------------------------
-# 1) Read pipe catalogue, define materials + fluids + soil
+# 1) Read pipe catalog, define materials + fluids + soil
 # -----------------------------------------------------------------------------
-pipe_catalogue = read_pipe_catalogue(pipe_catalogue_file)
+pipe_catalog = read_pipe_catalog()
 
 pipe_material_dist = Material(
     density=975,
@@ -64,13 +72,18 @@ soil = Soil(
 # -----------------------------------------------------------------------------
 # 2) Distribution network
 # -----------------------------------------------------------------------------
-distribution_network_undimensioned = read_undimensioned_topology_tsv_to_network(
-    topology_file,
-    pipe_material=pipe_material_dist,
+network_parameters = DistributionNetworkParameters(
     roughness=1e-6,
     burial_depth=1.2,
-    pipe_distance=0.3,
-    n_parallel_pipes=2,
+    pipe_spacing=0.3,
+    n_pipes_parallel=2,
+)
+
+topology = read_undimensioned_topology_tsv(topology_file)
+distribution_network_undimensioned = build_distribution_network(
+    topology,
+    pipe_material=pipe_material_dist,
+    network_parameters=network_parameters,
 )
 
 # -----------------------------------------------------------------------------
@@ -79,34 +92,31 @@ distribution_network_undimensioned = read_undimensioned_topology_tsv_to_network(
 n_boreholes = 6
 spacing_m = 15.0
 coordinates = [[0.0, i * spacing_m] for i in range(n_boreholes)]
-borehole_diameter_m = 0.152
-u_pipe_outer_diameter_m = 0.04
-u_pipe_sdr = 11.0
 grout = Material(density=1500, specific_heat=2e3, thermal_conductivity=1.75)
 pipe_material_bhe = Material(density=1000, specific_heat=2e3, thermal_conductivity=0.4)
-borehole = Annulus(diameter_outer=borehole_diameter_m, sdr=1000.0)
+borehole = Annulus(diameter_outer=0.152, sdr=1000.0)
 
-upipe = PipeSegment(
-    diameter_outer=u_pipe_outer_diameter_m,
-    sdr=u_pipe_sdr,
-    material=pipe_material_bhe,
+pipe_segment_parameters_bhe = PipeSegmentParameters(
+    diameter_outer=0.04,
+    sdr=11.0,
     roughness=1e-6,
-    id_=0,
-    length=100,  # placeholder
 )
 
-BHEfield = VHEField(
-    id_=1,
-    heat_exchanger_type='1U',
-    pipe=upipe,
-    borehole=borehole,
-    grout=grout,
-    coordinates=coordinates,
+vhe_field_parameters = VHEFieldParameters(
     shank_spacing=0.015 + 2 * 0.02,
-    length_borehole=120.0,
     burial_depth=1.0,
     tilt_rad=0.0,
     orientation_rad=0.0,
+    heat_exchanger_type="1U",
+)
+
+BHEfield = build_vhe_field(
+    segment_parameters=pipe_segment_parameters_bhe,
+    field_parameters=vhe_field_parameters,
+    pipe_material=pipe_material_bhe,
+    borehole=borehole,
+    grout=grout,
+    coordinates=coordinates,
 )
 
 # -----------------------------------------------------------------------------
@@ -114,9 +124,7 @@ BHEfield = VHEField(
 # -----------------------------------------------------------------------------
 hp_list = read_heat_pumps_tsv(path=heat_pump_file)
 
-loads = ground_loads_from_heat_pumps(
-    hp_list,
-    brine,
+peak_supply = HeatPumpPeakSupplyParameters(
     peak_hours_heating=4.0,
     peak_fraction_heating_mode="incremental",
     peak_fraction_heating=1.0,
@@ -125,19 +133,27 @@ loads = ground_loads_from_heat_pumps(
     peak_fraction_cooling=1.0,
 )
 
+loads = ground_loads_from_heat_pumps(
+    hp_list,
+    brine=brine,
+    peak_supply=peak_supply,
+)
+
 sizing = SizingParameters(thermal_dimensioning_lifetime=30.0)
 
 # -----------------------------------------------------------------------------
 # 5) Brine temperature limits
 # -----------------------------------------------------------------------------
-T_BRINE_MIN_HEAT = -3.0   # HP evaporator inlet limit [°C]
-T_BRINE_MAX_COOL = 20.0   # HP condenser inlet limit [°C]
+brine_temperature_limits = BrineTemperatureLimits(
+    temperature_brine_min_heating=-3.0,
+    temperature_brine_max_cooling=20.0,
+)
 
 # -----------------------------------------------------------------------------
 # 6) Hydraulic pipe network sizing (mode-specific)
 # -----------------------------------------------------------------------------
 hydraulic = run_pipedimensioning(
-    pipe_catalogue,
+    pipe_catalog,
     brine,
     distribution_network_undimensioned,
     hp_list,
@@ -153,7 +169,11 @@ result = run_bhe_sizing_workflow(
     brine=brine,
     soil=soil,
     sizing=sizing,
-    T_brine_min_heat=T_BRINE_MIN_HEAT,
-    T_brine_max_cool=T_BRINE_MAX_COOL,
+    brine_temperature_limits=brine_temperature_limits,
 )
 print_bhe_results(result)
+
+out_dir = PROJECT_DIR / "out"
+out_dir.mkdir(exist_ok=True)
+save_bhe_results_txt(result, out_dir / "results.txt")
+save_bhe_results_json(result, out_dir / "results.json")

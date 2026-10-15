@@ -11,8 +11,24 @@ from pythermonet.dimensioning.hydraulic_result import HydraulicResult
 logger = get_logger(__name__)
 
 
+def _validate_heat_pump_ids_known(network, hp_by_id) -> None:
+    """Reject traces referencing heat pump IDs absent from the heat pump list."""
+    problems = []
+    for name, ids in zip(network.names_trace, network.heat_pump_ids_trace):
+        unknown = sorted({int(hpid) for hpid in ids} - set(hp_by_id))
+        if unknown:
+            problems.append(f"'{name}' references {unknown}")
+
+    if problems:
+        raise ValueError(
+            "Topology references heat pump IDs that are not in the heat pump "
+            "input: " + "; ".join(problems) + ". Check that the topology and "
+            "heat pump files belong to the same project."
+        )
+
+
 def run_pipedimensioning(
-    pipe_catalogue,   # Iterable of pipe catalogue entries (outer_diameter, sdr, ...)
+    pipe_catalog,   # Iterable of pipe catalog entries (outer_diameter, sdr, ...)
     brine,            # HeatCarrier (density, specific_heat, dynamic_viscosity)
     network,          # DistributionNetwork
     heat_pumps,   # list[HeatPump]
@@ -25,13 +41,14 @@ def run_pipedimensioning(
     Netværksobjektet muteres ikke.
     """
 
+    hp_by_id = {hp.id_: hp for hp in heat_pumps}
+    _validate_heat_pump_ids_known(network, hp_by_id)
+
     # Sortér unikke outer diameters fra kataloget
-    pipe_catalogue_sorted = np.asarray(
-        sorted({a.diameter_outer for a in pipe_catalogue}),
+    pipe_catalog_sorted = np.asarray(
+        sorted({a.diameter_outer for a in pipe_catalog}),
         dtype=float,
     )
-
-    hp_by_id = {hp.id_: hp for hp in heat_pumps}
     N_trace = len(network.heat_pump_ids_trace)
 
     doCooling = any(
@@ -100,7 +117,7 @@ def run_pipedimensioning(
     for i in range(N_trace):
         sdr_i = float(sdr_arr[i])
 
-        candidate_outer_diameters = pipe_catalogue_sorted
+        candidate_outer_diameters = pipe_catalog_sorted
         candidate_inner_diameters = candidate_outer_diameters * (1.0 - 2.0 / sdr_i)
 
         L_tot_i = n_parallel_pipes * float(L_trace_arr[i])
@@ -179,9 +196,9 @@ def run_pipedimensioning(
         ],
         dtype=float,
     )
-    pressure_losses_heating = np.array(
+    pressure_losses_per_length_heating = np.array(
         [
-            L_tot_arr[i] * dp(
+            dp(
                 brine.density,
                 brine.dynamic_viscosity,
                 float(m3_s_per_trace_heating[i]),
@@ -191,8 +208,11 @@ def run_pipedimensioning(
         ],
         dtype=float,
     )
+    pressure_losses_heating = L_tot_arr * pressure_losses_per_length_heating
 
+    v_C = None
     reynolds_numbers_cooling = None
+    pressure_losses_per_length_cooling = None
     pressure_losses_cooling = None
     if doCooling:
         v_C = m3_s_per_trace_cooling / (np.pi * installed_inner_diameter**2 / 4.0)
@@ -203,9 +223,9 @@ def run_pipedimensioning(
             ],
             dtype=float,
         )
-        pressure_losses_cooling = np.array(
+        pressure_losses_per_length_cooling = np.array(
             [
-                L_tot_arr[i] * dp(
+                dp(
                     brine.density,
                     brine.dynamic_viscosity,
                     float(m3_s_per_trace_cooling[i]),
@@ -215,6 +235,7 @@ def run_pipedimensioning(
             ],
             dtype=float,
         )
+        pressure_losses_cooling = L_tot_arr * pressure_losses_per_length_cooling
 
     return HydraulicResult(
         network=network,
@@ -223,57 +244,12 @@ def run_pipedimensioning(
         governing_mode=np.asarray(governing_mode, dtype=object),
         volume_flow_rates_peak_heating=m3_s_per_trace_heating,
         volume_flow_rates_peak_cooling=m3_s_per_trace_cooling,
+        velocities_heating=v_H,
+        velocities_cooling=v_C,
         reynolds_numbers_heating=reynolds_numbers_heating,
         reynolds_numbers_cooling=reynolds_numbers_cooling,
+        pressure_losses_per_length_heating=pressure_losses_per_length_heating,
+        pressure_losses_per_length_cooling=pressure_losses_per_length_cooling,
         pressure_losses_heating=pressure_losses_heating,
         pressure_losses_cooling=pressure_losses_cooling,
     )
-
-def print_pipe_dimensioning_table(hydraulic: HydraulicResult):
-    """
-    Printer en tabel for det installerede trace-netværk.
-    """
-
-    N = len(hydraulic.diameters_outer)
-    doCooling = hydraulic.reynolds_numbers_cooling is not None
-
-    header_parts = [
-        f"{'Trace':>6}",
-        f"{'Mode':>10}",
-        f"{'Do [mm]':>10}",
-        f"{'Di [mm]':>10}",
-        f"{'Re_heat':>12}",
-        f"{'dp_heat [kPa]':>14}",
-    ]
-
-    if doCooling:
-        header_parts += [
-            f"{'Re_cool':>12}",
-            f"{'dp_cool [kPa]':>14}",
-        ]
-
-    header = " ".join(header_parts)
-
-    print("\nDistribution pipe dimensioning")
-    print(header)
-    print("-" * len(header))
-
-    for i in range(N):
-        row_parts = [
-            f"{i:6d}",
-            f"{str(hydraulic.governing_mode[i]):>10}",
-            f"{hydraulic.diameters_outer[i] * 1000:10.1f}",
-            f"{hydraulic.diameters_inner[i] * 1000:10.1f}",
-            f"{hydraulic.reynolds_numbers_heating[i]:12.0f}",
-            f"{hydraulic.pressure_losses_heating[i] / 1000:14.2f}",
-        ]
-
-        if doCooling:
-            row_parts += [
-                f"{hydraulic.reynolds_numbers_cooling[i]:12.0f}",
-                f"{hydraulic.pressure_losses_cooling[i] / 1000:14.2f}",
-            ]
-
-        print(" ".join(row_parts))
-
-    print()

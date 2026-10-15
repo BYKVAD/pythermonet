@@ -36,7 +36,7 @@ class BHEResistanceResult:
     radius_pipe_inner : float
         U-pipe inner radius [m].
     shank_spacing : float
-        Centre-to-centre distance between the two U-pipe legs [m].
+        Center-to-center distance between the two U-pipe legs [m].
     used_flow_length_correction : bool
         Whether the flow-length correction was applied when computing Rb.
     """

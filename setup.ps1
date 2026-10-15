@@ -1,5 +1,5 @@
 # setup.ps1
-# Automated environment setup for pythermonetII (Windows PowerShell)
+# Automated environment setup for pythermonet (Windows PowerShell)
 # Usage: .\setup.ps1                        — production install (core deps only)
 #        .\setup.ps1 -Dev                   — dev install (pinned versions from requirements.lock, includes matplotlib)
 #        .\setup.ps1 -VenvPath my_venv      — use a custom venv name/path
@@ -12,7 +12,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "=== pythermonetII setup ==="
+Write-Host "=== pythermonet setup ==="
 
 # Go to script directory (project root)
 Set-Location -Path $PSScriptRoot

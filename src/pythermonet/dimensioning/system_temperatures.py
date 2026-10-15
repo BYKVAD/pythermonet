@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -40,36 +40,39 @@ class SystemBrineTemperatureResult:
         Total brine volume [m³].
     volume_fraction_bhe : float
         V_bhe / V_total.
+
+    Field metadata holds each quantity's unit and description (used by the
+    results JSON writer).
     """
 
-    temperature_system_mean_annual_heating: float         # [°C]
-    temperature_system_mean_winter_heating: float         # [°C]
-    temperature_system_mean_peak_heating: float           # [°C]
+    temperature_system_mean_annual_heating: float = field(metadata={"unit": "degC", "description": "Volume-weighted mean brine temperature of the whole circuit, annual pulse, heating"})
+    temperature_system_mean_winter_heating: float = field(metadata={"unit": "degC", "description": "Volume-weighted mean brine temperature of the whole circuit, winter pulse, heating"})
+    temperature_system_mean_peak_heating: float = field(metadata={"unit": "degC", "description": "Volume-weighted mean brine temperature of the whole circuit, peak pulse, heating"})
 
-    temperature_system_mean_annual_cooling: float | None  # [°C]
-    temperature_system_mean_summer_cooling: float | None  # [°C]
-    temperature_system_mean_peak_cooling: float | None    # [°C]
+    temperature_system_mean_annual_cooling: float | None = field(metadata={"unit": "degC", "description": "Volume-weighted mean brine temperature of the whole circuit, annual pulse, cooling"})
+    temperature_system_mean_summer_cooling: float | None = field(metadata={"unit": "degC", "description": "Volume-weighted mean brine temperature of the whole circuit, summer pulse, cooling"})
+    temperature_system_mean_peak_cooling: float | None = field(metadata={"unit": "degC", "description": "Volume-weighted mean brine temperature of the whole circuit, peak pulse, cooling"})
 
-    temperature_bhe_annual_heating: float                 # [°C]
-    temperature_bhe_winter_heating: float                 # [°C]
-    temperature_bhe_peak_heating: float                   # [°C]
+    temperature_bhe_annual_heating: float = field(metadata={"unit": "degC", "description": "Mean brine temperature in the boreholes, annual pulse, heating"})
+    temperature_bhe_winter_heating: float = field(metadata={"unit": "degC", "description": "Mean brine temperature in the boreholes, winter pulse, heating"})
+    temperature_bhe_peak_heating: float = field(metadata={"unit": "degC", "description": "Mean brine temperature in the boreholes, peak pulse, heating"})
 
-    temperature_bhe_annual_cooling: float | None          # [°C]
-    temperature_bhe_summer_cooling: float | None          # [°C]
-    temperature_bhe_peak_cooling: float | None            # [°C]
+    temperature_bhe_annual_cooling: float | None = field(metadata={"unit": "degC", "description": "Mean brine temperature in the boreholes, annual pulse, cooling"})
+    temperature_bhe_summer_cooling: float | None = field(metadata={"unit": "degC", "description": "Mean brine temperature in the boreholes, summer pulse, cooling"})
+    temperature_bhe_peak_cooling: float | None = field(metadata={"unit": "degC", "description": "Mean brine temperature in the boreholes, peak pulse, cooling"})
 
-    temperature_thermonet_annual_heating: float | None    # [°C]
-    temperature_thermonet_winter_heating: float | None    # [°C]
-    temperature_thermonet_peak_heating: float | None      # [°C]
+    temperature_thermonet_annual_heating: float | None = field(metadata={"unit": "degC", "description": "Mean brine temperature in the distribution pipes, annual pulse, heating"})
+    temperature_thermonet_winter_heating: float | None = field(metadata={"unit": "degC", "description": "Mean brine temperature in the distribution pipes, winter pulse, heating"})
+    temperature_thermonet_peak_heating: float | None = field(metadata={"unit": "degC", "description": "Mean brine temperature in the distribution pipes, peak pulse, heating"})
 
-    temperature_thermonet_annual_cooling: float | None    # [°C]
-    temperature_thermonet_summer_cooling: float | None    # [°C]
-    temperature_thermonet_peak_cooling: float | None      # [°C]
+    temperature_thermonet_annual_cooling: float | None = field(metadata={"unit": "degC", "description": "Mean brine temperature in the distribution pipes, annual pulse, cooling"})
+    temperature_thermonet_summer_cooling: float | None = field(metadata={"unit": "degC", "description": "Mean brine temperature in the distribution pipes, summer pulse, cooling"})
+    temperature_thermonet_peak_cooling: float | None = field(metadata={"unit": "degC", "description": "Mean brine temperature in the distribution pipes, peak pulse, cooling"})
 
-    volume_brine_bhe: float        # [m³]
-    volume_brine_thermonet: float  # [m³]
-    volume_brine_total: float      # [m³]
-    volume_fraction_bhe: float
+    volume_brine_bhe: float = field(metadata={"unit": "m^3", "description": "Brine volume in the boreholes (both U-pipe legs)"})
+    volume_brine_thermonet: float = field(metadata={"unit": "m^3", "description": "Brine volume in the distribution pipes (supply and return)"})
+    volume_brine_total: float = field(metadata={"unit": "m^3", "description": "Total brine volume of the ground-side circuit"})
+    volume_fraction_bhe: float = field(metadata={"unit": "-", "description": "Share of the total brine volume in the boreholes"})
 
 
 def _bhe_mean_temperatures_heating(

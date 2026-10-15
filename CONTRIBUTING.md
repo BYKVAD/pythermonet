@@ -1,4 +1,4 @@
-# Contributing to pythermonetII
+# Contributing to pythermonet
 
 ## Branch model
 

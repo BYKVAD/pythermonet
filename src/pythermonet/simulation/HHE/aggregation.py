@@ -49,7 +49,7 @@ class PairGeometry:
     once and reused. Separations are rounded to a tolerance to allow
     grouping of near-identical geometries.
     """
-    lateral_separation: float    # [m] centre-to-centre pipe spacing (y direction)
+    lateral_separation: float    # [m] center-to-center pipe spacing (y direction)
     longitudinal_offset: float   # [m] start-position offset along trace (x direction)
     segment_index_source: int
     segment_index_receiver: int
@@ -101,7 +101,7 @@ def build_interaction_map(
     n_parallel : int
         Number of parallel pipes (PipeInfrastructure.n_pipes_parallel).
     pipe_distance : float
-        Lateral centre-to-centre pipe spacing (m).
+        Lateral center-to-center pipe spacing (m).
     trace_segments : list of PipeSegment
         Segment definitions (PipeInfrastructure.segments_trace).
     t : float

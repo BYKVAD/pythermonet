@@ -97,7 +97,7 @@ def fls_gfunc_single(
     g = 0.5 * (1/L) * integral_{-L/2}^{L/2} integral_{-L/2}^{L/2} [...] dxi_r dxi_s
 
     For a long pipe (L >> sqrt(4at)) this approaches the ILS solution.
-    Here we compute the simpler point-evaluation form at the pipe centre:
+    Here we compute the simpler point-evaluation form at the pipe center:
     g_approx = 0.5 * integral_{-L/2}^{L/2} erfc(sqrt(u^2+r^2)/sqrt(4at))/sqrt(u^2+r^2) du
     """
     from scipy.integrate import quad
@@ -315,8 +315,8 @@ def test_spatial_cutoff():
 
     # Close pipe: should be larger than g1 at longer times
     t_long = np.array([3600.0 * 24 * 30])
-    g1_l  = hhe.gfunction(make_field(1),          soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, time=t_long)
-    g2_l  = hhe.gfunction(make_field(2, spacing=1.0), soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, time=t_long)
+    g1_l  = hhe.gfunction(make_field(1),          soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=t_long)
+    g2_l  = hhe.gfunction(make_field(2, spacing=1.0), soil_thermal_conductivity=K_S, soil_thermal_diffusivity=ALPHA, evaluation_times=t_long)
     assert g2_l[0] > g1_l[0], "Nearby pipe should increase g at longer times"
 
     print(f"  [PASS] Spatial cutoff: distant pipe negligible at early times OK")

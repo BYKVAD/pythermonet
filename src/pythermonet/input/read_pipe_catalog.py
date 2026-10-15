@@ -6,6 +6,7 @@ from typing import List
 import pandas as pd
 
 from pythermonet.core.annulus import Annulus
+from pythermonet.resources import PIPE_CATALOG_PATH
 
 
 _REQUIRED_COLS = [
@@ -14,10 +15,16 @@ _REQUIRED_COLS = [
 ]
 
 
-def read_pipe_catalogue(path: str | Path) -> List[Annulus]:
+def read_pipe_catalog(path: str | Path | None = None) -> List[Annulus]:
     """
-    Read pipe catalogue from CSV (semicolon-separated) and return a list
+    Read pipe catalog from CSV (semicolon-separated) and return a list
     of Annulus objects.
+
+    Parameters
+    ----------
+    path : str | Path | None
+        Path to a pipe catalog CSV. If None, reads the catalog bundled
+        with this package.
 
     Notes
     -----
@@ -25,9 +32,9 @@ def read_pipe_catalogue(path: str | Path) -> List[Annulus]:
     - Converts outer diameter from mm to m.
     - Only geometric properties relevant for dimensioning are retained.
     """
-    p = Path(path)
+    p = Path(path) if path is not None else PIPE_CATALOG_PATH
     if not p.exists():
-        raise FileNotFoundError(f"Pipe catalogue not found: {p}")
+        raise FileNotFoundError(f"Pipe catalog not found: {p}")
 
     df = pd.read_csv(p, sep=";")
     df.columns = [c.strip() for c in df.columns]
@@ -35,17 +42,17 @@ def read_pipe_catalogue(path: str | Path) -> List[Annulus]:
     missing = [c for c in _REQUIRED_COLS if c not in df.columns]
     if missing:
         raise ValueError(
-            f"Pipe catalogue is missing required columns: {missing}"
+            f"Pipe catalog is missing required columns: {missing}"
         )
 
-    catalogue: List[Annulus] = []
+    catalog: List[Annulus] = []
 
     for _, r in df.iterrows():
-        catalogue.append(
+        catalog.append(
             Annulus(
                 diameter_outer=float(r["outer_diameter_mm"]) / 1000.0,
                 sdr=float(r["standard_dimension_ratio"]),
             )
         )
 
-    return catalogue
+    return catalog

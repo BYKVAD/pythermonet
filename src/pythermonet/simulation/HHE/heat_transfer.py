@@ -6,7 +6,7 @@ Single-integral Horizontal Finite Line Source (HFLS) for buried parallel pipes.
 Physical setup
 --------------
 Two parallel horizontal pipes of equal length L are buried at the same depth D,
-with a lateral (centre-to-centre) separation dy. Both pipes start at x = 0.
+with a lateral (center-to-center) separation dy. Both pipes start at x = 0.
 An isothermal ground surface (T = 0 at z = 0) is enforced by method of images:
 each real pipe at depth D has a mirror source at depth -D (i.e. 2D above the
 real pipe).
@@ -81,7 +81,7 @@ def hfls_pipe_interaction(
     L : float
         Pipe length (m).
     dy : float
-        Lateral centre-to-centre separation from receiver (m).
+        Lateral center-to-center separation from receiver (m).
         Pass 0.0 for the self-response.
     depth : float
         Burial depth (m), positive downward.

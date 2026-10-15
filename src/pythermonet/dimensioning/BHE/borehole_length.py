@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import math
+# Used as dataclasses.field(...), not imported as plain `field`: "field" is a
+# parameter name (the GroundField) in many functions of this module.
+import dataclasses
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -514,11 +517,16 @@ from pythermonet.dimensioning.ground_field import GroundField  # noqa: E402
 
 @dataclass(frozen=True)
 class FieldSizingResult:
-    """Result from the generic ground-field sizing solver."""
-    length_element: float              # [m]
-    governing_mode: str                # "heating" or "cooling"
-    thermal_resistance_heating: float  # [K·m/W]
-    thermal_resistance_cooling: float | None  # [K·m/W]
+    """Result from the generic ground-field sizing solver.
+
+    Field metadata holds each quantity's unit and description (used by the
+    results JSON writer).
+    """
+    # dataclasses.field, qualified: "field" is a parameter name throughout this module.
+    length_element: float = dataclasses.field(metadata={"unit": "m", "description": "Sized length of one ground heat exchanger element (BHE: borehole length; HHE: one-way pipe length, loop length is twice this)"})
+    governing_mode: str = dataclasses.field(metadata={"unit": "-", "description": "Mode that governed the sized length (heating or cooling)"})
+    thermal_resistance_heating: float = dataclasses.field(metadata={"unit": "K*m/W", "description": "Effective thermal resistance between brine and ground at peak flow, heating"})
+    thermal_resistance_cooling: float | None = dataclasses.field(metadata={"unit": "K*m/W", "description": "Effective thermal resistance between brine and ground at peak flow, cooling"})
 
 
 # ---------------------------------------------------------------------------

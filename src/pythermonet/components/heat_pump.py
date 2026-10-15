@@ -75,3 +75,22 @@ class HeatPump:
             object.__setattr__(self, "load_ground_peak_cooling",   0.0)
             object.__setattr__(self, "load_ground_summer_cooling", 0.0)
             object.__setattr__(self, "load_ground_annual_cooling", 0.0)
+
+
+@dataclass
+class BrineTemperatureLimits:
+    """Allowed brine operating temperature limits.
+
+    Parameters
+    ----------
+    temperature_brine_min_heating : float
+        Minimum allowed brine temperature during heating — HP evaporator
+        inlet limit [°C].
+    temperature_brine_max_cooling : float
+        Maximum allowed brine temperature during cooling — HP condenser
+        inlet limit [°C].
+
+    """
+
+    temperature_brine_min_heating: float  # °C
+    temperature_brine_max_cooling: float  # °C
