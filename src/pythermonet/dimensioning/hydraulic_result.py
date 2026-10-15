@@ -36,9 +36,9 @@ class HydraulicResult:
     reynolds_numbers_cooling: np.ndarray | None = field(metadata={"unit": "-", "description": "Reynolds number at peak flow per trace, cooling"})
 
     # Pressure loss per pipe length for installed network (per trace) [Pa/m]
-    pressure_losses_per_length_heating: np.ndarray = field(metadata={"unit": "Pa/m", "description": "Pressure loss per pipe length at peak flow per trace, heating"})
-    pressure_losses_per_length_cooling: np.ndarray | None = field(metadata={"unit": "Pa/m", "description": "Pressure loss per pipe length at peak flow per trace, cooling"})
+    pressure_losses_per_length_heating: np.ndarray = field(metadata={"unit": "Pa/m", "description": "Pressure loss per metre of a single pipe, one direction (supply or return), at peak flow per trace, heating"})
+    pressure_losses_per_length_cooling: np.ndarray | None = field(metadata={"unit": "Pa/m", "description": "Pressure loss per metre of a single pipe, one direction (supply or return), at peak flow per trace, cooling"})
 
     # Total pressure loss for installed network (per trace) [Pa]
-    pressure_losses_heating: np.ndarray = field(metadata={"unit": "Pa", "description": "Pressure loss along one pipe path of the trace (parallel pipes x length) at peak flow, heating"})
-    pressure_losses_cooling: np.ndarray | None = field(metadata={"unit": "Pa", "description": "Pressure loss along one pipe path of the trace (parallel pipes x length) at peak flow, cooling"})
+    pressure_losses_heating: np.ndarray = field(metadata={"unit": "Pa", "description": "Pressure loss through one trace, supply and return pipe together (n_pipes_parallel x one-way length), at peak flow, heating"})
+    pressure_losses_cooling: np.ndarray | None = field(metadata={"unit": "Pa", "description": "Pressure loss through one trace, supply and return pipe together (n_pipes_parallel x one-way length), at peak flow, cooling"})

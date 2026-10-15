@@ -59,8 +59,8 @@ class HHEWorkflowResult:
     brine: HeatCarrier
     pressure_loss_hhe_heating: float = field(metadata={"unit": "Pa", "description": "Pressure loss through one HHE loop (out and return) at peak flow, heating"})
     pressure_loss_hhe_cooling: float | None = field(metadata={"unit": "Pa", "description": "Pressure loss through one HHE loop (out and return) at peak flow, cooling"})
-    pressure_loss_per_length_hhe_heating: float = field(metadata={"unit": "Pa/m", "description": "Pressure loss per HHE pipe length at peak flow, heating"})
-    pressure_loss_per_length_hhe_cooling: float | None = field(metadata={"unit": "Pa/m", "description": "Pressure loss per HHE pipe length at peak flow, cooling"})
+    pressure_loss_per_length_hhe_heating: float = field(metadata={"unit": "Pa/m", "description": "Pressure loss per metre of HHE pipe at peak flow, heating; the brine flows out and back, so one loop's total is this x 2 x one-way pipe length"})
+    pressure_loss_per_length_hhe_cooling: float | None = field(metadata={"unit": "Pa/m", "description": "Pressure loss per metre of HHE pipe at peak flow, cooling; the brine flows out and back, so one loop's total is this x 2 x one-way pipe length"})
     mass_flow_rate_peak_hhe_heating: float = field(metadata={"unit": "kg/s", "description": "Peak brine mass flow per HHE loop, heating"})
     mass_flow_rate_peak_hhe_cooling: float | None = field(metadata={"unit": "kg/s", "description": "Peak brine mass flow per HHE loop, cooling"})
     diameter_outer_hhe: float                          # [m]

@@ -52,8 +52,8 @@ class BHEWorkflowResult:
     brine: HeatCarrier
     pressure_loss_bhe_heating: float = field(metadata={"unit": "Pa", "description": "Pressure loss through one borehole's U-pipe (both legs) at peak flow, heating"})
     pressure_loss_bhe_cooling: float | None = field(metadata={"unit": "Pa", "description": "Pressure loss through one borehole's U-pipe (both legs) at peak flow, cooling"})
-    pressure_loss_per_length_bhe_heating: float = field(metadata={"unit": "Pa/m", "description": "Pressure loss per U-pipe length at peak flow, heating"})
-    pressure_loss_per_length_bhe_cooling: float | None = field(metadata={"unit": "Pa/m", "description": "Pressure loss per U-pipe length at peak flow, cooling"})
+    pressure_loss_per_length_bhe_heating: float = field(metadata={"unit": "Pa/m", "description": "Pressure loss per metre of U-pipe at peak flow, heating; the brine flows down and back up, so one borehole's total is this x 2 x borehole length"})
+    pressure_loss_per_length_bhe_cooling: float | None = field(metadata={"unit": "Pa/m", "description": "Pressure loss per metre of U-pipe at peak flow, cooling; the brine flows down and back up, so one borehole's total is this x 2 x borehole length"})
     mass_flow_rate_peak_bhe_heating: float = field(metadata={"unit": "kg/s", "description": "Peak brine mass flow per borehole, heating"})
     mass_flow_rate_peak_bhe_cooling: float | None = field(metadata={"unit": "kg/s", "description": "Peak brine mass flow per borehole, cooling"})
     timestamp_run: datetime                              # timezone-aware local time
