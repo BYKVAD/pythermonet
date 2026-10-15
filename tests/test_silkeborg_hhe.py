@@ -285,22 +285,22 @@ class TestHHEThermalDimensioning:
     def test_system_temperature_cooling_annual(self, hhe_dimensioning):
         _, result = hhe_dimensioning
         T = result.temperature_system_annual_cooling
-        assert abs(T - 13.54) < 0.05, (
-            f"T_avg_cool_annual = {T:.2f}°C deviates >0.05°C from 13.54°C"
+        assert abs(T - 11.25) < 0.05, (
+            f"T_avg_cool_annual = {T:.2f}°C deviates >0.05°C from 11.25°C"
         )
 
     def test_system_temperature_cooling_summer(self, hhe_dimensioning):
         _, result = hhe_dimensioning
         T = result.temperature_system_summer_cooling
-        assert abs(T - 13.55) < 0.05, (
-            f"T_avg_cool_summer = {T:.2f}°C deviates >0.05°C from 13.55°C"
+        assert abs(T - 19.75) < 0.05, (
+            f"T_avg_cool_summer = {T:.2f}°C deviates >0.05°C from 19.75°C"
         )
 
     def test_system_temperature_cooling_peak(self, hhe_dimensioning):
         _, result = hhe_dimensioning
         T = result.temperature_system_peak_cooling
-        assert abs(T - 13.94) < 0.05, (
-            f"T_avg_cool_peak = {T:.2f}°C deviates >0.05°C from 13.94°C"
+        assert abs(T - 22.00) < 0.05, (
+            f"T_avg_cool_peak = {T:.2f}°C deviates >0.05°C from 22.00°C"
         )
 
 

@@ -251,17 +251,40 @@ def _bundle_k1(
 
 def _mode_numerator(T0_C: float, Tm_C: float, TP_C: float, mode: str) -> tuple[float, float]:
     """
-    Returnerer:
-      numerator
-      sign for TP in temperature reconstruction
+    Return the supply-fraction numerator and the mode sign.
 
-    heating:
-      num = T0 - Tm - TP
-      T = T0 - TP - ...
+    ``_compute_mode`` reconstructs the brine temperature at each pulse as
 
-    cooling:
-      num = Tm - T0 - TP
-      T = T0 + TP - ...
+        T = T0 + sign * (TP + F * cumsum(dP * kernel))
+
+    where ``T0 + sign * TP`` is the undisturbed ground temperature in the worst
+    season. The supply fraction ``F`` is chosen so that ``T`` equals ``Tm`` at
+    the peak pulse, which gives ``F = numerator / sum(dP * kernel)``.
+
+    Parameters
+    ----------
+    T0_C : float
+        Undisturbed ground temperature [°C].
+    Tm_C : float
+        Design mean brine temperature through the heat pumps [°C].
+    TP_C : float
+        Amplitude of the annual ground temperature swing at burial depth [K].
+    mode : str
+        ``"heating"`` or ``"cooling"``.
+
+    Returns
+    -------
+    numerator : float
+        Distance from the worst-season ground temperature to ``Tm`` [K]:
+        ``T0 - TP - Tm`` in heating, ``Tm - T0 - TP`` in cooling.
+    sign : float
+        -1.0 in heating (the load cools the brine), +1.0 in cooling (the load
+        warms it).
+
+    Raises
+    ------
+    ValueError
+        If ``mode`` is not ``"heating"`` or ``"cooling"``.
     """
     if mode == "heating":
         return (T0_C - Tm_C - TP_C, -1.0)
@@ -345,7 +368,7 @@ def _compute_mode(
         F_i = float(numerator / denom)
         load_supply_fractions_per_group[i] = F_i
 
-        T_seq_C = float(model.temperature_ground_undisturbed) + tp_sign * TP_C - F_i * np.cumsum(dP * kernel)
+        T_seq_C = float(model.temperature_ground_undisturbed) + tp_sign * TP_C + tp_sign * F_i * np.cumsum(dP * kernel)
 
         volume_m3 = float(pg.n_traces) * float(pg.length) * math.pi * float(pg.diameter_inner) ** 2 / 4.0
         total_volume_m3 += volume_m3
