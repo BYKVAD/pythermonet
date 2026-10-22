@@ -249,15 +249,15 @@ def _mode_numerator(T0_C: float, Tm_C: float, TP_C: float, mode: str) -> tuple[f
     """
     Returnerer:
       numerator
-      sign for TP in temperature reconstruction
+      sign for TP and the load response in temperature reconstruction
 
     heating:
       num = T0 - Tm - TP
-      T = T0 - TP - ...
+      T = T0 - TP - F·Σ(dP·kernel)
 
     cooling:
       num = Tm - T0 - TP
-      T = T0 + TP - ...
+      T = T0 + TP + F·Σ(dP·kernel)
     """
     if mode == "heating":
         return (T0_C - Tm_C - TP_C, -1.0)
@@ -341,7 +341,7 @@ def _compute_mode(
         F_i = float(numerator / denom)
         load_supply_fractions_per_group[i] = F_i
 
-        T_seq_C = float(model.temperature_ground_undisturbed) + tp_sign * TP_C - F_i * np.cumsum(dP * kernel)
+        T_seq_C = float(model.temperature_ground_undisturbed) + tp_sign * (TP_C + F_i * np.cumsum(dP * kernel))
 
         volume_m3 = float(pg.n_traces) * float(pg.length) * math.pi * float(pg.diameter_inner) ** 2 / 4.0
         total_volume_m3 += volume_m3

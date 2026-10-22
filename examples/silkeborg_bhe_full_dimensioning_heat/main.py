@@ -25,9 +25,9 @@ from pythermonet.dimensioning.sizing_parameters import SizingParameters
 # Paths
 # -----------------------------------------------------------------------------
 PROJECT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = PROJECT_DIR.parents[2]
+REPO_ROOT = PROJECT_DIR.parents[1]
 
-pipe_catalogue_file = REPO_ROOT / "PythermonetII/src/pythermonet/resources/pipe_catalogue.csv"
+pipe_catalogue_file = REPO_ROOT / "src/pythermonet/resources/pipe_catalogue.csv"
 heat_pump_file = PROJECT_DIR / "data/silkeborg_heat_pump_heat_high_cool.dat"
 topology_file = PROJECT_DIR / "data/silkeborg_topology.dat"
 
@@ -54,8 +54,8 @@ soil = Soil(
     density=2500,
     specific_heat=1000,
     thermal_conductivity=2.36,
-    thermal_conductivity_shallow_heating=1.25,
-    thermal_conductivity_shallow_cooling=1.25,
+    thermal_conductivity_shallow_heating=1.8,
+    thermal_conductivity_shallow_cooling=1.8,
     geothermal_heat_flux=0.0185,
     temperature_surface_mean=9.03,
     temperature_surface_amplitude=7.9,
@@ -68,8 +68,8 @@ distribution_network_undimensioned = read_undimensioned_topology_tsv_to_network(
     topology_file,
     pipe_material=pipe_material_dist,
     roughness=1e-6,
-    burial_depth=1.2,
-    pipe_distance=0.3,
+    burial_depth=0.9,
+    pipe_distance=1,
     n_parallel_pipes=2,
 )
 
@@ -104,7 +104,7 @@ BHEfield = VHEField(
     coordinates=coordinates,
     shank_spacing=0.015 + 2 * 0.02,
     length_borehole=120.0,
-    burial_depth=1.0,
+    burial_depth=0.9,
     tilt_rad=0.0,
     orientation_rad=0.0,
 )

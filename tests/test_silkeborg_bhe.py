@@ -236,6 +236,24 @@ class TestBHEThermalDimensioning:
         T = result.temperatures_system.temperature_system_mean_peak_heating
         assert abs(T - (-2.59)) < 0.05
 
+    # Peak mean brine temperature must sit at T_limit ∓ 0.5·ΔT_brine:
+    # heating -3.0 - 0.5·3.0 = -4.5 °C, cooling 20.0 + 0.5·4.0 = 22.0 °C.
+    def test_thermonet_peak_temperature_heating_at_limit(self, bhe_dimensioning):
+        _, result = bhe_dimensioning
+        T = result.temperatures_system.temperature_thermonet_peak_heating
+        assert abs(T - (-4.5)) < 1e-6
+
+    def test_thermonet_peak_temperature_cooling_at_limit(self, bhe_dimensioning):
+        _, result = bhe_dimensioning
+        T = result.temperatures_system.temperature_thermonet_peak_cooling
+        assert abs(T - 22.0) < 1e-6
+
+    def test_bhe_peak_temperature_governing_mode_at_limit(self, bhe_dimensioning):
+        _, result = bhe_dimensioning
+        assert result.sizing.governing_mode == "cooling"
+        T = result.temperatures_system.temperature_bhe_peak_cooling
+        assert abs(T - 22.0) < 0.01
+
     def test_bhe_pressure_drop_heating(self, bhe_dimensioning):
         _, result = bhe_dimensioning
         assert abs(result.pressure_loss_bhe_heating - 78_524) < 500
