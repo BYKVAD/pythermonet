@@ -304,5 +304,5 @@ def print_bhe_results(result: BHEWorkflowResult) -> None:
         ))
     lines.append(bot_t)
     print('\n'.join(lines))
-    print(f'  * governs the borehole length (peak = T_limit ∓ 0.5·ΔT); '
-          f'the other mode runs inside its limit.')
+    print('  * governs the borehole length (peak = T_limit ∓ 0.5·ΔT)'
+          + ('; the other mode runs inside its limit.' if has_cooling else '.'))

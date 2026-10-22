@@ -1,0 +1,46 @@
+{
+  "engine": "pygfunction",
+  "pygfunction_version": "unknown",
+  "numpy_version": "2.4.2",
+  "solver_method": "equivalent",
+  "boundary_condition": "UHTR",
+  "alpha_m2_s": 8.90566037735849e-07,
+  "n_boreholes": 6,
+  "time_grid": {
+    "n": 3,
+    "t_min_s": 14400.0,
+    "t_max_s": 946728000.0
+  },
+  "options": {},
+  "boreholes_geometry": {
+    "H_m": 150.0,
+    "D_m": 1.5,
+    "r_b_m": 0.076,
+    "xy": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        15.0
+      ],
+      [
+        0.0,
+        30.0
+      ],
+      [
+        0.0,
+        45.0
+      ],
+      [
+        0.0,
+        60.0
+      ],
+      [
+        0.0,
+        75.0
+      ]
+    ]
+  }
+}
