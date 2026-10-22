@@ -5,7 +5,7 @@ Regression tests for the Silkeborg BHE full-dimensioning example
 (heat + cooling, undimensioned topology).
 
 Reference values were captured from:
-  examples/silkeborg_bhe_full_dimensioning_heat/main.py
+  examples/silkeborg_bhe_full_dimensioning_heat_cool/main.py
 
 Run with:
     python -m pytest tests/test_silkeborg_bhe.py -v
@@ -36,7 +36,7 @@ from pythermonet.input.read_topology import read_undimensioned_topology_tsv_to_n
 _EXAMPLE_DIR = (
     Path(__file__).resolve().parents[1]
     / "examples"
-    / "silkeborg_bhe_full_dimensioning_heat"
+    / "silkeborg_bhe_full_dimensioning_heat_cool"
 )
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _PIPE_CATALOGUE = _REPO_ROOT / "src" / "pythermonet" / "resources" / "pipe_catalogue.csv"

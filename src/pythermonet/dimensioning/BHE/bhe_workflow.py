@@ -282,17 +282,27 @@ def print_bhe_results(result: BHEWorkflowResult) -> None:
     bot_t = f"└{'─'*LW}┴{'─'*VW}┴{'─'*VW}┴{'─'*VW}┘"
 
     def hdr() -> str:
-        return f"│{'':{LW}}│{'Annual':^{VW}}│{'Winter':^{VW}}│{'Peak':^{VW}}│"
+        return f"│{'':{LW}}│{'Annual':^{VW}}│{'Season':^{VW}}│{'Peak':^{VW}}│"
 
     def trow(label: str, a: float, w: float, p: float) -> str:
         fa, fw, fp = f'{a:.2f}', f'{w:.2f}', f'{p:.2f}'
         return f"│ {label:<{LW-2}} │{fa:>{VW-1}} │{fw:>{VW-1}} │{fp:>{VW-1}} │"
 
+    def mode_label(mode: str) -> str:
+        return f"System mean temp ({mode}){'*' if sizing.governing_mode == mode else ''}"
+
     print()
     lines = [top_t, hdr(), div_t]
     lines.append(trow(
-        'System mean temp (heating)   [°C]',
+        f"{mode_label('heating'):<29}[°C]",
         t.temperature_system_mean_annual_heating, t.temperature_system_mean_winter_heating, t.temperature_system_mean_peak_heating,
     ))
+    if t.temperature_system_mean_peak_cooling is not None:
+        lines.append(trow(
+            f"{mode_label('cooling'):<29}[°C]",
+            t.temperature_system_mean_annual_cooling, t.temperature_system_mean_summer_cooling, t.temperature_system_mean_peak_cooling,
+        ))
     lines.append(bot_t)
     print('\n'.join(lines))
+    print(f'  * governs the borehole length (peak = T_limit ∓ 0.5·ΔT); '
+          f'the other mode runs inside its limit.')
