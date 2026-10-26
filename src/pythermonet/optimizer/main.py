@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from pythermonet.components.heat_pump import HeatPump
 from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
-from pythermonet.optimizer.heat_pump import create_heat_pump
+from pythermonet.input.read_fastload_estimator_output import fast_load_to_hps
 from pythermonet.optimizer.configure_thermonet import execute_dimensioning
 from pythermonet.optimizer.ashp_vs_gshp import monthly_elec_loads
 from pythermonet.input.df_from_sources import df_from_csv
@@ -18,6 +18,11 @@ from pythermonet.optimizer.configure_lcoe import (
 )
 from scipy.optimize import minimize_scalar  # noqa: F401
 
+#TODO Centralize this variable somewhere - also present in ashp_vs_gshp
+season_periods = {
+    "winter": [1, 2, 3, 4, 11, 12],
+    "summer": [5, 6, 7, 8, 9, 10]
+}
 
 def print_lcoe_breakdown(res: dict, currency: str):
     """Pretty LCOE breakdown table."""
@@ -52,23 +57,34 @@ _BASELINE_LCOE_ASHP = set_init_lcoe_ashp()
 
 
 
-def _setup_heatpump(rated_power_W: float, num_hp=15):
-    list_of_num_hp = range(0,num_hp,1)
-    hp_list = [
-        create_heat_pump(rated_power_W=rated_power_W/15, hp_id=i + 1)
-        for i in list_of_num_hp
-    ]
-
-    sizing = SizingParameters(time_horizon_years=30.0)
-
-    return hp_list, sizing
+def _create_heatpump_list(cops: list[float], peak_demand_cop: float):
+    annual_cop = sum(cops)/len(cops)
+    winter_cops = [cops[month_index-1] for month_index in season_periods["winter"]]
+    winter_cop = sum(winter_cops)/len(winter_cops)
 
 
-def _setup_heatpump_from_file(
+    hp_list = fast_load_to_hps(
+        file_path=r"C:\software\fast_load_estimator\output\my_run\results_annual.json",
+        annual_cop=annual_cop,
+        winter_cop=winter_cop,
+        energy_effiency_ratio=4,
+        peak_demand_cop=peak_demand_cop
+    )
+
+    return hp_list
+
+
+def _setup_sizing() -> SizingParameters:
+    return SizingParameters(time_horizon_years=30.0)
+
+
+def _setup_heatpumps(
     n_hps: int,
     hp_file: Path | None = None,
     default_hp_load_W: float | None = None,
-) -> tuple[list[HeatPump], SizingParameters]:
+    fallback_cops: list[float] | None = None,
+    fallback_peak_demand_cop: float = 3.5,
+) -> list[HeatPump]:
     """Build the per-building HP list for the N-buildings scenario.
 
     If `hp_file` is provided, read it (silkeborg-shape TSV) and keep the first
@@ -84,17 +100,18 @@ def _setup_heatpump_from_file(
             raise ValueError(
                 f"n_hps={n_hps} exceeds available HPs in file ({len(all_hps)})"
             )
-        hp_list = all_hps[:n_hps]
-    else:
-        if default_hp_load_W is None:
-            raise ValueError("default_hp_load_W is required when hp_file is None")
-        hp_list = [
-            create_heat_pump(rated_power_W=default_hp_load_W, hp_id=i + 1)
-            for i in range(n_hps)
-        ]
+        return all_hps[:n_hps]
 
-    sizing = SizingParameters(time_horizon_years=30.0)
-    return hp_list, sizing
+    if default_hp_load_W is None:
+        raise ValueError("default_hp_load_W is required when hp_file is None")
+
+    cops = fallback_cops if fallback_cops is not None else [3.5] * 12
+    return _create_heatpump_list(
+        rated_power_W=default_hp_load_W * n_hps,
+        cops=cops,
+        peak_demand_cop=fallback_peak_demand_cop,
+        num_hp=n_hps,
+    )
 
     
 
@@ -121,14 +138,20 @@ def evaluate_cost(
     outputs that drove it, so callers (e.g. sweeps/plots) can inspect both.
     """
 
-    hp_list, sizing = _setup_heatpump(rated_power_W)
-    hp_list_for_loads = list(hp_list)
+    gshp_cops = [3.2, 3.2, 3.4, 3.4, 3.4, 3.4, 3.5, 3.6, 3.6, 3.6, 3.5, 3.4]
+    ashp_cops = [2.3, 2.4, 2.8, 3.4, 4.0, 4.3, 4.5, 4.4, 4.0, 3.4, 2.9, 2.5]
 
+    gshp_list = _create_heatpump_list(rated_power_W, gshp_cops)
+    gshp_list_for_loads = list(gshp_list)
 
+    ashp_list = _create_heatpump_list(rated_power_W, ashp_cops)
+    ashp_list_for_loads = list(ashp_list)
+
+    sizing = _setup_sizing()
     
 
-    gshp_elec_loads = monthly_elec_loads(hp_list_for_loads, [3.2, 3.2, 3.4, 3.4, 3.4, 3.4, 3.5, 3.6, 3.6, 3.6, 3.5, 3.4])
-    ashp_elec_loads = monthly_elec_loads(hp_list_for_loads, [2.3, 2.4, 2.8, 3.4, 4.0, 4.3, 4.5, 4.4, 4.0, 3.4, 2.9, 2.5])
+    gshp_elec_loads = monthly_elec_loads(gshp_list_for_loads, gshp_cops)
+    ashp_elec_loads = monthly_elec_loads(ashp_list_for_loads, ashp_cops)
 
     elec_demand = {"tot_gshp_load": sum(gshp_elec_loads), "tot_ashp_load": sum(ashp_elec_loads)}
 
@@ -151,7 +174,7 @@ def evaluate_cost(
             lcoe_model = manipulate_lcoe_input_ashp(deepcopy(_BASELINE_LCOE_ASHP), elec)
         else:
             dims = execute_dimensioning(
-                hp_list=hp_list_for_loads,
+                hp_list=gshp_list_for_loads,
                 n_boreholes=n_boreholes,
                 sizing=sizing
             )
@@ -204,10 +227,12 @@ def evaluate_cost_by_n_hps(
     heating demand from the HP file (or an identical fallback load). Baseline
     CAPEX scales by n_hps/15 in both variants; no fake supplementary HP.
     """
-    hp_list, sizing = _setup_heatpump_from_file(n_hps, hp_file, default_hp_load_W)
+    hp_list = _setup_heatpumps(n_hps, hp_file, default_hp_load_W)
+    sizing = _setup_sizing()
 
     gshp_elec_loads = monthly_elec_loads(hp_list, [3.2, 3.2, 3.4, 3.4, 3.4, 3.4, 3.5, 3.6, 3.6, 3.6, 3.5, 3.4])
     ashp_elec_loads = monthly_elec_loads(hp_list, [2.3, 2.4, 2.8, 3.4, 4.0, 4.3, 4.5, 4.4, 4.0, 3.4, 2.9, 2.5])
+    
     elec_demand = {"tot_gshp_load": sum(gshp_elec_loads), "tot_ashp_load": sum(ashp_elec_loads)}
 
     active_hp_ids = set(range(1, n_hps + 1))

@@ -168,6 +168,12 @@ def run_pipedimensioning(
     # 3) Beregn Reynolds-tal og tryktab for det installerede netværk
     #    i begge modes
     # ------------------------------------------------------------------
+    print(
+        f"    [DEBUG hydraulic] n_hp={len(heat_pump_list):>2}  "
+        f"d_outer(mm)={[f'{d*1000:.1f}' for d in selected_outer_diameter]}  "
+        f"m3_s_heat={[f'{q:.4g}' for q in m3_s_per_trace_heating]}",
+        flush=True,
+    )
     installed_inner_diameter = selected_outer_diameter * (1.0 - 2.0 / SDR_arr)
     L_tot_arr = n_parallel_pipes * L_trace_arr
 

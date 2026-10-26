@@ -10,6 +10,8 @@ from lcc5gdhc.cost_items import (
     DebtScheduleTS
 )
 
+#TODO Move to a correct placement of models / dataclasses
+
 @dataclass
 class LCOE:
     capex_ts: List[CapexScheduleTS]

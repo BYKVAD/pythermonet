@@ -9,6 +9,8 @@ season_periods = {
     "summer": [5, 6, 7, 8, 9, 10]
 }
 
+#TODO Move dataclass to a single file grouped with other 
+
 @dataclass(frozen=True)
 class Loads():
     winter_load: float

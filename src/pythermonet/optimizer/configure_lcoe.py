@@ -1,10 +1,6 @@
 from typing import List
 
 from pythermonet.optimizer.lcoe_model import LCOE
-from pythermonet.optimizer.heat_pump import (
-    fake_hp_capex_DKK,
-    fake_hp_annual_elec_MWh,
-)
 from lcc5gdhc.cost_items import (
     CapexScheduleTS,
     OpexFixedTS,

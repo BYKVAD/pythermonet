@@ -12,6 +12,7 @@ from pythermonet.core.soil import Soil
 from pythermonet.input.read_pipe_catalogue import read_pipe_catalogue
 from pythermonet.input.read_topology import read_undimensioned_topology_tsv_to_network
 from pythermonet.input.read_heat_pumps import read_heat_pumps_tsv
+from pythermonet.input.read_fastload_estimator_output import fast_load_to_hps
 from pythermonet.dimensioning.hydraulic_dimensioning import run_pipedimensioning
 
 from pythermonet.components.vhe_field import VHEField
@@ -112,12 +113,25 @@ BHEfield = VHEField(
 # -----------------------------------------------------------------------------
 # 4) Heat pumps
 # -----------------------------------------------------------------------------
-hp_list = read_heat_pumps_tsv(df_from_csv(path=heat_pump_file, sep="\t+"))
+# hp_list = read_heat_pumps_tsv(df_from_csv(path=heat_pump_file, sep="\t+"))
+hp_list = fast_load_to_hps(
+    file_path = r"C:\software\fast_load_estimator\output\my_run\results_annual.json",
+    annual_cop=3.3,
+    winter_cop=3.5,
+    peak_demand_cop=3.2,
+    energy_effiency_ratio=4.2,
+    
+)
 
-sys.path.insert(0, str(PROJECT_DIR.parent / "optimizer_capex_vs_energy"))
-from ashp_vs_gshp import monthly_elec_loads  # type: ignore[import-not-found]
+# sys.path.insert(0, str(PROJECT_DIR.parent / "optimizer_capex_vs_energy"))
+# from ashp_vs_gshp import monthly_elec_loads  # type: ignore[import-not-found]
 
-monthly_elec_loads(hp_list, [3.2, 3.2, 3.4, 3.4, 3.4, 3.4, 3.5, 3.6, 3.6, 3.6, 3.5, 3.4])
+# gshp_elec_loads = monthly_elec_loads(hp_list, [3.2, 3.2, 3.4, 3.4, 3.4, 3.4, 3.5, 3.6, 3.6, 3.6, 3.5, 3.4])
+# ashp_elec_loads = monthly_elec_loads(hp_list, [2.3, 2.4, 2.8, 3.4, 4.0, 4.3, 4.5, 4.4, 4.0, 3.4, 2.9, 2.5])
+
+# tot_gshp_load = sum(gshp_elec_loads)
+# tot_ashp_load = sum(ashp_elec_loads)
+
 
 loads = ground_loads_from_heat_pumps(
     hp_list,

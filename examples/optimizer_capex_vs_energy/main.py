@@ -79,6 +79,13 @@ def sweep_by_n_hps(
         except ValueError as e:
             print(f"    -> INFEASIBLE: {e}")
             continue
+        gshp = res["tot_gshp_load"]
+        print(
+            f"    [DEBUG n={n:>2}] source_length={gshp.source_length_m:>8.1f} m  "
+            f"num_boreholes={gshp.num_boreholes:>2}  "
+            f"borehole_capex={gshp.borehole_capex_DKK:>12,.0f} DKK",
+            flush=True,
+        )
         results.append(res)
     return results
 
